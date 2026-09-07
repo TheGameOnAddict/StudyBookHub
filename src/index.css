@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  --color-lavender-50: #FAF8FE;
+  --color-lavender-100: #F3EEFF;
+  --color-lavender-200: #E7DBFB;
+  --color-lavender-300: #D4BEF7;
+  --color-lavender-400: #B795F0;
+  --color-lavender-500: #9B6DE7;
+  --color-lavender-600: #844BDB;
+  --color-lavender-700: #6F36C4;
+  --color-lavender-800: #5C2CA3;
+  --color-lavender-900: #4C2484;
+  --color-lavender-950: #2C1052;
+}
+
+:root {
+  --bg-primary: #FAF9FD;
+  --bg-card: #FFFFFF;
+  --text-main: #232034;
+  --text-muted: #6C6684;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom smooth scrollbars with lavender tint */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F3EEFF;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4BEF7;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B795F0;
+}
+
+/* Text layer PDF styling */
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.25;
+  line-height: 1;
+  user-select: text;
+  -webkit-user-select: text;
+  transform-origin: 0 0;
+  pointer-events: auto;
+}
+
+.textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.textLayer ::selection {
+  background: rgba(167, 139, 250, 0.45);
+  color: transparent;
+}
+
