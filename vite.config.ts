@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  base: './', // Ensures relative assets paths for GitHub Pages
+  base: '/StudyBookHub/', // Ensures correct asset resolution on GitHub Pages
   build: {
     target: 'esnext',
   }
