@@ -140,6 +140,14 @@ export const BookCard: React.FC<BookCardProps> = ({
               <Clock className="w-3 h-3 text-purple-400" />
               {formatTime(book.lastReadAt)}
             </span>
+            {book.completedChapters && book.completedChapters.length > 0 && (
+              <>
+                <span>•</span>
+                <span className="text-emerald-600 font-medium">
+                  {book.completedChapters.length} studied
+                </span>
+              </>
+            )}
           </div>
         </div>
 

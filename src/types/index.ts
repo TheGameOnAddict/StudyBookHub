@@ -9,6 +9,7 @@ export interface Book {
   addedAt: number;
   lastReadAt: number;
   isCompleted?: boolean;
+  completedChapters?: string[]; // IDs of studied chapters/subchapters
   coverDataUrl?: string;
   pdfBlob?: Blob; // Stored locally in IndexedDB for instant offline opening
 }
@@ -72,8 +73,10 @@ export interface BookmarkItem {
 }
 
 export interface TocItem {
+  id?: string;
   title: string;
   pageNumber: number;
+  endPage?: number;
   items?: TocItem[];
 }
 

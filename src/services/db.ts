@@ -58,6 +58,20 @@ export async function updateBookProgress(
   });
 }
 
+export async function toggleChapterCompleted(bookId: string, chapterId: string): Promise<string[]> {
+  const book = await db.books.get(bookId);
+  if (!book) return [];
+  const currentCompleted = new Set(book.completedChapters || []);
+  if (currentCompleted.has(chapterId)) {
+    currentCompleted.delete(chapterId);
+  } else {
+    currentCompleted.add(chapterId);
+  }
+  const updated = Array.from(currentCompleted);
+  await db.books.update(bookId, { completedChapters: updated });
+  return updated;
+}
+
 export async function deleteBook(id: string): Promise<void> {
   await db.transaction('rw', [db.books, db.drawings, db.highlights, db.notes, db.bookmarks], async () => {
     await db.books.delete(id);

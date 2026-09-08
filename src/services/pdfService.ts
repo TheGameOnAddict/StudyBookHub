@@ -82,11 +82,44 @@ export async function extractPdfOutline(pdfDoc: pdfjsLib.PDFDocumentProxy): Prom
       return results;
     };
 
-    return await parseItems(outline);
+    const rawItems = await parseItems(outline);
+    return enrichTocItemsWithPageRanges(rawItems, pdfDoc.numPages);
   } catch (err) {
     console.warn('Error reading PDF outline:', err);
     return [];
   }
+}
+
+export function enrichTocItemsWithPageRanges(
+  items: TocItem[],
+  totalPages: number,
+  parentEndPage?: number,
+  prefix = 'toc'
+): TocItem[] {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const safeTitle = item.title.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
+    item.id = `${prefix}_${item.pageNumber}_${i}_${safeTitle}`;
+
+    // Determine endPage:
+    // If there is a next sibling, it ends before the next sibling starts
+    // If it's the last sibling, it ends at parentEndPage (or totalPages for top-level)
+    let end: number;
+    if (i < items.length - 1) {
+      const nextSiblingStart = items[i + 1].pageNumber;
+      end = nextSiblingStart > item.pageNumber ? nextSiblingStart - 1 : item.pageNumber;
+    } else {
+      end = parentEndPage ?? totalPages;
+    }
+    item.endPage = Math.max(item.pageNumber, end);
+
+    // If item has children, recursively assign end pages bounded by this item's endPage
+    if (item.items && item.items.length > 0) {
+      enrichTocItemsWithPageRanges(item.items, totalPages, item.endPage, `${item.id}`);
+    }
+  }
+
+  return items;
 }
 
 /**

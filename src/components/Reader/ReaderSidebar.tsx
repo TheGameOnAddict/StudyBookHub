@@ -6,12 +6,18 @@ import {
   X,
   Search,
   CheckCircle2,
+  Circle,
   Trash2,
   FileDown,
   ExternalLink,
   ChevronDown,
 } from 'lucide-react';
 import type { BookmarkItem, HighlightItem, NoteItem, TocItem } from '../../types';
+import {
+  countTotalChaptersAndCompleted,
+  findActiveChapter,
+  getChapterPageProgress,
+} from '../../utils/chapterProgress';
 import confetti from 'canvas-confetti';
 
 interface ReaderSidebarProps {
@@ -31,6 +37,8 @@ interface ReaderSidebarProps {
   bookTitle: string;
   isCompleted?: boolean;
   onToggleCompleted?: () => void;
+  completedChapterIds?: string[];
+  onToggleChapter?: (id: string) => void;
 }
 
 const TocItemRow: React.FC<{
@@ -38,20 +46,35 @@ const TocItemRow: React.FC<{
   currentPage: number;
   onJumpToPage: (page: number) => void;
   depth?: number;
-}> = ({ item, currentPage, onJumpToPage, depth = 0 }) => {
+  completedChapterIds?: string[];
+  onToggleChapter?: (id: string) => void;
+}> = ({
+  item,
+  currentPage,
+  onJumpToPage,
+  depth = 0,
+  completedChapterIds = [],
+  onToggleChapter,
+}) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const hasChildren = item.items && item.items.length > 0;
-  const isCurrent = currentPage === item.pageNumber;
+  const isWithinRange =
+    currentPage >= item.pageNumber && currentPage <= (item.endPage || item.pageNumber);
+  const isItemCompleted = !!(item.id && completedChapterIds.includes(item.id));
+  const pageProgress = getChapterPageProgress(item, currentPage);
+  const hasMultiplePages = (item.endPage || item.pageNumber) > item.pageNumber;
 
   return (
     <div className="space-y-0.5">
       <div
         className={`w-full text-left px-2 py-1.5 rounded-xl text-xs flex items-center justify-between group transition-all ${
-          isCurrent
-            ? 'bg-purple-100 text-purple-950 font-bold shadow-xs'
+          isWithinRange
+            ? 'bg-purple-100/90 text-purple-950 font-medium shadow-xs border border-purple-200/80'
+            : isItemCompleted
+            ? 'bg-emerald-50/40 text-gray-700 hover:bg-purple-50/50'
             : 'hover:bg-purple-50 text-gray-700'
         }`}
-        style={{ paddingLeft: `${Math.min(depth * 12 + 6, 44)}px` }}
+        style={{ paddingLeft: `${Math.min(depth * 14 + 6, 44)}px` }}
       >
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {hasChildren ? (
@@ -72,22 +95,63 @@ const TocItemRow: React.FC<{
             <div className="w-3.5 h-3.5 shrink-0" />
           )}
 
+          {/* Chapter study completion checkbox */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (item.id && onToggleChapter) {
+                onToggleChapter(item.id);
+              }
+            }}
+            title={isItemCompleted ? 'Mark as unstudied' : 'Mark as studied'}
+            className="p-0.5 text-gray-400 hover:scale-110 active:scale-95 transition-transform shrink-0"
+          >
+            {isItemCompleted ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
+            ) : (
+              <Circle className="w-3.5 h-3.5 text-purple-300 hover:text-purple-600" />
+            )}
+          </button>
+
           <button
             onClick={() => onJumpToPage(item.pageNumber)}
-            className="truncate text-left flex-1 hover:text-purple-800"
+            className={`truncate text-left flex-1 hover:text-purple-800 ${
+              isItemCompleted ? 'line-through text-gray-400' : ''
+            } ${isWithinRange ? 'font-bold text-purple-950' : ''}`}
             title={item.title}
           >
             {item.title}
           </button>
         </div>
 
-        <button
-          onClick={() => onJumpToPage(item.pageNumber)}
-          className="text-[10px] text-purple-600 font-mono shrink-0 pl-1.5 hover:underline"
-        >
-          p.{item.pageNumber}
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0 pl-1.5">
+          {isWithinRange && hasMultiplePages && (
+            <span className="text-[10px] font-semibold text-purple-700 bg-purple-200/70 px-1.5 py-0.2 rounded-full">
+              {pageProgress.progress}%
+            </span>
+          )}
+          <button
+            onClick={() => onJumpToPage(item.pageNumber)}
+            className="text-[10px] text-purple-600 font-mono hover:underline"
+            title={`Go to page ${item.pageNumber}`}
+          >
+            p.{item.pageNumber}
+            {hasMultiplePages ? `-${item.endPage}` : ''}
+          </button>
+        </div>
       </div>
+
+      {/* Mini progress bar under currently active section */}
+      {isWithinRange && hasMultiplePages && (
+        <div className="mx-2 px-1 pb-1">
+          <div className="w-full bg-purple-200/60 h-1 rounded-full overflow-hidden">
+            <div
+              className="bg-purple-600 h-full rounded-full transition-all duration-300"
+              style={{ width: `${pageProgress.progress}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {hasChildren && isExpanded && (
         <div className="space-y-0.5">
@@ -98,6 +162,8 @@ const TocItemRow: React.FC<{
               currentPage={currentPage}
               onJumpToPage={onJumpToPage}
               depth={depth + 1}
+              completedChapterIds={completedChapterIds}
+              onToggleChapter={onToggleChapter}
             />
           ))}
         </div>
@@ -123,11 +189,20 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
   bookTitle,
   isCompleted,
   onToggleCompleted,
+  completedChapterIds = [],
+  onToggleChapter,
 }) => {
   const [activeTab, setActiveTab] = useState<'toc' | 'notes' | 'bookmarks'>('notes');
   const [searchQuery, setSearchQuery] = useState('');
 
   const progressPercent = totalPages > 0 ? Math.round((currentPage / totalPages) * 100) : 0;
+
+  // Chapter and Subchapter progress statistics
+  const activeInfo = findActiveChapter(toc, currentPage);
+  const activeTarget = activeInfo.subchapter || activeInfo.chapter;
+  const isCurrentTargetCompleted = activeTarget?.id ? completedChapterIds.includes(activeTarget.id) : false;
+  const activeProgress = activeTarget ? getChapterPageProgress(activeTarget, currentPage) : null;
+  const chapterStats = countTotalChaptersAndCompleted(toc, completedChapterIds);
 
   // Trigger celebratory confetti when completing a textbook
   const handleCompleteToggle = () => {
@@ -248,24 +323,113 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Table of Contents */}
         {activeTab === 'toc' && (
-          <div className="space-y-1">
+          <div className="space-y-3">
             {toc.length === 0 ? (
               <div className="text-center py-12 text-gray-400 text-xs">
                 <BookOpen className="w-8 h-8 mx-auto mb-2 text-purple-200" />
                 No embedded Table of Contents found in this PDF.
               </div>
             ) : (
-              <div className="space-y-1">
-                {toc.map((item, idx) => (
-                  <TocItemRow
-                    key={`${item.title}_${idx}`}
-                    item={item}
-                    currentPage={currentPage}
-                    onJumpToPage={onJumpToPage}
-                    depth={0}
-                  />
-                ))}
-              </div>
+              <>
+                {/* Overall Chapter Mastery Card */}
+                <div className="p-3 bg-purple-50/80 border border-purple-200/80 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-purple-900 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
+                      Chapter Mastery
+                    </span>
+                    <span className="font-mono text-[11px] font-bold text-purple-700">
+                      {chapterStats.completed} / {chapterStats.total} ({chapterStats.percent}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-purple-200/60 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-purple-500 to-purple-600 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${chapterStats.percent}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Currently Studying Card */}
+                {activeInfo.chapter && (
+                  <div className="p-3 bg-gradient-to-br from-purple-100/70 to-purple-50 border border-purple-200 rounded-2xl space-y-2 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 flex items-center gap-1">
+                        <BookOpen className="w-3 h-3" />
+                        Currently Studying
+                      </span>
+                      {activeTarget && (
+                        <button
+                          onClick={() => activeTarget.id && onToggleChapter?.(activeTarget.id)}
+                          className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg font-medium transition-all ${
+                            isCurrentTargetCompleted
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-purple-200/70 text-purple-800 hover:bg-purple-200'
+                          }`}
+                        >
+                          {isCurrentTargetCompleted ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Studied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Circle className="w-3 h-3 text-purple-600" />
+                              <span>Mark Studied</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-xs truncate">
+                        {activeInfo.chapter.title}
+                      </h4>
+                      {activeInfo.subchapter && (
+                        <p className="text-[11px] text-purple-700 font-medium truncate mt-0.5">
+                          ↳ {activeInfo.subchapter.title}
+                        </p>
+                      )}
+                    </div>
+
+                    {activeProgress && (
+                      <div className="space-y-1 pt-0.5">
+                        <div className="flex items-center justify-between text-[10px] text-gray-600">
+                          <span>
+                            Page {activeProgress.pagesRead} of {activeProgress.totalPages} in section
+                          </span>
+                          <span className="font-semibold text-purple-700">{activeProgress.progress}%</span>
+                        </div>
+                        <div className="w-full bg-purple-200/60 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="bg-purple-600 h-full rounded-full transition-all duration-300"
+                            style={{ width: `${activeProgress.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Table of Contents Hierarchical Tree */}
+                <div className="space-y-1 pt-1">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-1">
+                    All Chapters & Sections
+                  </p>
+                  {toc.map((item, idx) => (
+                    <TocItemRow
+                      key={`${item.title}_${idx}`}
+                      item={item}
+                      currentPage={currentPage}
+                      onJumpToPage={onJumpToPage}
+                      depth={0}
+                      completedChapterIds={completedChapterIds}
+                      onToggleChapter={onToggleChapter}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
@@ -437,6 +601,73 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                 <span>{isCompleted ? 'Marked as Completed! 🎉' : 'Mark Book as Completed'}</span>
               </button>
             </div>
+
+            {/* Chapter Mastery Breakdown */}
+            {toc.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                    Chapter Mastery ({chapterStats.completed}/{chapterStats.total})
+                  </p>
+                  <span className="text-[10px] font-semibold text-purple-600">
+                    {chapterStats.percent}%
+                  </span>
+                </div>
+                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                  {toc.map((chap, cIdx) => {
+                    const chapProgress = getChapterPageProgress(chap, currentPage);
+                    const isChapDone = !!(chap.id && completedChapterIds.includes(chap.id));
+                    return (
+                      <div
+                        key={`${chap.title}_${cIdx}`}
+                        className={`p-2 rounded-xl border text-xs transition-all ${
+                          isChapDone
+                            ? 'bg-emerald-50/40 border-emerald-200 text-gray-800'
+                            : 'bg-purple-50/30 border-purple-100 text-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            onClick={() => chap.id && onToggleChapter?.(chap.id)}
+                            className="flex items-center gap-1.5 truncate text-left flex-1"
+                          >
+                            {isChapDone ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            ) : (
+                              <Circle className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                            )}
+                            <span
+                              className={`truncate font-medium ${
+                                isChapDone ? 'line-through text-gray-400' : ''
+                              }`}
+                            >
+                              {chap.title}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => onJumpToPage(chap.pageNumber)}
+                            className="text-[10px] text-purple-600 font-mono shrink-0 hover:underline"
+                          >
+                            p.{chap.pageNumber}
+                          </button>
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <div className="flex-1 bg-purple-200/50 h-1 rounded-full overflow-hidden">
+                            <div
+                              className="bg-purple-600 h-full rounded-full"
+                              style={{ width: `${chapProgress.progress}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-gray-400 font-mono shrink-0">
+                            {chapProgress.progress}%
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Bookmarks List */}
             <div className="space-y-2">

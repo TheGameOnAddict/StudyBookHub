@@ -12,6 +12,9 @@ import {
   getBookmarks,
   getBookHighlights,
   getBookNotes,
+  getBook,
+  saveBook,
+  toggleChapterCompleted,
   isBookmarked as checkIsBookmarked,
   saveNote,
   savePageDrawings,
@@ -69,6 +72,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [isCurrentBookmarked, setIsCurrentBookmarked] = useState<boolean>(false);
   const [isCompleted, setIsCompleted] = useState<boolean>(initialIsCompleted);
+  const [completedChapters, setCompletedChapters] = useState<string[]>([]);
 
   // Drawing state
   const [isDrawingActive, setIsDrawingActive] = useState<boolean>(false);
@@ -154,6 +158,30 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   useEffect(() => {
     refreshAnnotations();
   }, [refreshAnnotations]);
+
+  // Load book metadata including chapter completion state
+  useEffect(() => {
+    getBook(bookId).then((b) => {
+      if (b) {
+        if (b.completedChapters) setCompletedChapters(b.completedChapters);
+        if (b.isCompleted !== undefined) setIsCompleted(b.isCompleted);
+      }
+    });
+  }, [bookId]);
+
+  const handleToggleChapter = async (chapterId: string) => {
+    const updated = await toggleChapterCompleted(bookId, chapterId);
+    setCompletedChapters(updated);
+  };
+
+  const handleToggleCompleted = async () => {
+    const next = !isCompleted;
+    setIsCompleted(next);
+    const book = await getBook(bookId);
+    if (book) {
+      await saveBook({ ...book, isCompleted: next });
+    }
+  };
 
   // Update reading progress in IndexedDB whenever currentPage or totalPages changes
   useEffect(() => {
@@ -538,7 +566,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                     {rects.map((rect, rIdx) => (
                       <div
                         key={`${hl.id}_${rIdx}`}
-                        className={`absolute pointer-events-auto cursor-pointer rounded-xs transition-all ${
+                        className={`absolute pointer-events-auto cursor-pointer rounded-none transition-all ${
                           isPulsing ? 'highlight-pulse' : 'hover:opacity-85'
                         }`}
                         style={{
@@ -548,7 +576,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                           height: `${rect.height * pageSize.height}px`,
                           backgroundColor: hl.color,
                           mixBlendMode: 'multiply',
-                          opacity: isPulsing ? 0.8 : 0.5,
+                          opacity: 0.45,
                         }}
                         title={
                           hl.note
@@ -666,7 +694,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         }}
         bookTitle={bookTitle}
         isCompleted={isCompleted}
-        onToggleCompleted={() => setIsCompleted(!isCompleted)}
+        onToggleCompleted={handleToggleCompleted}
+        completedChapterIds={completedChapters}
+        onToggleChapter={handleToggleChapter}
       />
 
       {/* Add Margin Note Modal */}
