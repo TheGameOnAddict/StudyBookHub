@@ -22,6 +22,7 @@ import type {
   BookmarkItem,
   DrawingTool,
   HighlightItem,
+  HighlightRect,
   NoteItem,
   TocItem,
 } from '../../types';
@@ -77,6 +78,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     x: number;
     y: number;
     text: string;
+    rects: HighlightRect[];
   } | null>(null);
 
   // Quick note dialog state
@@ -84,6 +86,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [newNoteText, setNewNoteText] = useState('');
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const pageContainerRef = useRef<HTMLDivElement | null>(null);
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
 
@@ -249,6 +252,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Handle Text Selection Popup
   const handleMouseUp = () => {
+    if (isDrawingActive) return;
+
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) {
       setSelectionTooltip(null);
@@ -256,16 +261,41 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }
 
     const text = selection.toString().trim();
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-
-    if (rect && rect.width > 0) {
-      setSelectionTooltip({
-        x: rect.left + rect.width / 2,
-        y: rect.top,
-        text,
-      });
+    if (!text) {
+      setSelectionTooltip(null);
+      return;
     }
+
+    const container = pageContainerRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    if (containerRect.width === 0 || containerRect.height === 0) return;
+
+    const range = selection.getRangeAt(0);
+    const rawRects = Array.from(range.getClientRects());
+    const validRects = rawRects.filter((r) => r.width > 1 && r.height > 1);
+
+    if (validRects.length === 0) {
+      setSelectionTooltip(null);
+      return;
+    }
+
+    // Normalize rects [0..1] relative to the PDF page container
+    const normalizedRects: HighlightRect[] = validRects.map((r) => ({
+      x: Math.max(0, (r.left - containerRect.left) / containerRect.width),
+      y: Math.max(0, (r.top - containerRect.top) / containerRect.height),
+      width: Math.min(1, r.width / containerRect.width),
+      height: Math.min(1, r.height / containerRect.height),
+    }));
+
+    const firstRect = validRects[0];
+    setSelectionTooltip({
+      x: firstRect.left + firstRect.width / 2,
+      y: firstRect.top,
+      text,
+      rects: normalizedRects,
+    });
   };
 
   // Apply Highlight
@@ -278,6 +308,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       text: selectionTooltip.text,
       color,
       note,
+      rects: selectionTooltip.rects,
       createdAt: Date.now(),
     };
 
@@ -285,6 +316,40 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     setSelectionTooltip(null);
     window.getSelection()?.removeAllRanges();
     refreshAnnotations();
+  };
+
+  // Helper to get or recover rects for any highlight
+  const getHighlightRects = (hl: HighlightItem): HighlightRect[] => {
+    if (hl.rects && hl.rects.length > 0) {
+      return hl.rects;
+    }
+    const textLayer = textLayerRef.current;
+    const container = pageContainerRef.current;
+    if (!textLayer || !container || !hl.text) return [];
+
+    const containerRect = container.getBoundingClientRect();
+    if (containerRect.width === 0 || containerRect.height === 0) return [];
+
+    const spans = Array.from(textLayer.querySelectorAll('span'));
+    const target = hl.text.trim().toLowerCase();
+    const found: HighlightRect[] = [];
+
+    for (const span of spans) {
+      const spanText = (span.textContent || '').trim().toLowerCase();
+      if (!spanText) continue;
+      if (target.includes(spanText) || spanText.includes(target)) {
+        const r = span.getBoundingClientRect();
+        if (r.width > 2 && r.height > 2) {
+          found.push({
+            x: Math.max(0, (r.left - containerRect.left) / containerRect.width),
+            y: Math.max(0, (r.top - containerRect.top) / containerRect.height),
+            width: Math.min(1, r.width / containerRect.width),
+            height: Math.min(1, r.height / containerRect.height),
+          });
+        }
+      }
+    }
+    return found;
   };
 
   // Bookmark toggling
@@ -376,20 +441,56 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       <main
         ref={containerRef}
         onMouseUp={handleMouseUp}
+        onTouchEnd={handleMouseUp}
         className="flex-1 overflow-auto flex justify-center items-start p-4 sm:p-8 select-text"
       >
         <div
-          className="relative bg-white shadow-2xl shadow-purple-900/10 rounded-sm overflow-hidden transition-shadow"
+          ref={pageContainerRef}
+          className="relative bg-white shadow-2xl shadow-purple-900/10 rounded-sm overflow-hidden transition-shadow select-text"
           style={{
             width: pageSize.width ? `${pageSize.width}px` : 'auto',
             height: pageSize.height ? `${pageSize.height}px` : 'auto',
+            isolation: 'isolate',
           }}
         >
           {/* PDF Page Canvas */}
           <canvas ref={pageCanvasRef} className="block pointer-events-none" />
 
+          {/* Visual Text Highlights Layer */}
+          <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+            {highlights
+              .filter((hl) => hl.pageNumber === currentPage)
+              .map((hl) => {
+                const rects = getHighlightRects(hl);
+                return (
+                  <div key={hl.id} className="contents">
+                    {rects.map((rect, rIdx) => (
+                      <div
+                        key={`${hl.id}_${rIdx}`}
+                        className="absolute pointer-events-auto cursor-pointer rounded-xs transition-opacity hover:opacity-80"
+                        style={{
+                          left: `${rect.x * pageSize.width}px`,
+                          top: `${rect.y * pageSize.height}px`,
+                          width: `${rect.width * pageSize.width}px`,
+                          height: `${rect.height * pageSize.height}px`,
+                          backgroundColor: hl.color,
+                          mixBlendMode: 'multiply',
+                          opacity: 0.5,
+                        }}
+                        title={hl.note ? `Note: ${hl.note}` : `Highlight: "${hl.text}"`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsSidebarOpen(true);
+                        }}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+          </div>
+
           {/* Text Layer for Selection & Native Text Highlighting */}
-          <div ref={textLayerRef} className="textLayer" />
+          <div ref={textLayerRef} className="textLayer z-15" />
 
           {/* Transparent Stylus / Touch Annotation Overlay */}
           {pageSize.width > 0 && pageSize.height > 0 && (

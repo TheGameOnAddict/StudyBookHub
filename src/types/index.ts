@@ -35,6 +35,13 @@ export interface PageDrawings {
   updatedAt: number;
 }
 
+export interface HighlightRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface HighlightItem {
   id: string;
   bookId: string;
@@ -42,6 +49,7 @@ export interface HighlightItem {
   text: string;
   color: string; // hex or color name
   note?: string;
+  rects?: HighlightRect[];
   createdAt: number;
 }
 
