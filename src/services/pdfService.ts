@@ -147,3 +147,37 @@ export async function generatePdfThumbnail(pdfDoc: pdfjsLib.PDFDocumentProxy): P
     return '';
   }
 }
+
+/**
+ * Extracts plain text from a range of pages in a PDF document (e.g. for a chapter or section)
+ */
+export async function extractTextFromPageRange(
+  pdfDoc: pdfjsLib.PDFDocumentProxy,
+  startPage: number,
+  endPage: number,
+  maxChars: number = 30000
+): Promise<string> {
+  const boundedStart = Math.max(1, Math.min(startPage, pdfDoc.numPages));
+  const boundedEnd = Math.max(boundedStart, Math.min(endPage, pdfDoc.numPages));
+  let combinedText = '';
+
+  for (let p = boundedStart; p <= boundedEnd; p++) {
+    if (combinedText.length >= maxChars) break;
+    try {
+      const page = await pdfDoc.getPage(p);
+      const textContent = await page.getTextContent();
+      const pageStrings = textContent.items
+        .map((item: any) => ('str' in item ? item.str : ''))
+        .filter(Boolean);
+      const pageText = pageStrings.join(' ').replace(/\s+/g, ' ').trim();
+      if (pageText) {
+        combinedText += `\n--- Page ${p} ---\n` + pageText;
+      }
+    } catch (err) {
+      console.warn(`Could not extract text from page ${p}:`, err);
+    }
+  }
+
+  return combinedText.slice(0, maxChars).trim();
+}
+

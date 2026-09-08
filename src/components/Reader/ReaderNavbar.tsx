@@ -9,6 +9,7 @@ import {
   Bookmark,
   PanelRight,
   FileEdit,
+  Sparkles,
 } from 'lucide-react';
 import { StudyTimer } from './StudyTimer';
 
@@ -31,6 +32,7 @@ interface ReaderNavbarProps {
   notesCount: number;
   initialStudyTimeSeconds?: number;
   onStudyTimeUpdate?: (totalSeconds: number) => void;
+  onOpenQuiz?: () => void;
 }
 
 export const ReaderNavbar: React.FC<ReaderNavbarProps> = ({
@@ -52,6 +54,7 @@ export const ReaderNavbar: React.FC<ReaderNavbarProps> = ({
   notesCount,
   initialStudyTimeSeconds,
   onStudyTimeUpdate,
+  onOpenQuiz,
 }) => {
   const [pageInput, setPageInput] = useState(currentPage.toString());
 
@@ -125,6 +128,18 @@ export const ReaderNavbar: React.FC<ReaderNavbarProps> = ({
           initialStudyTimeSeconds={initialStudyTimeSeconds}
           onStudyTimeUpdate={onStudyTimeUpdate}
         />
+
+        {/* AI Pop Quiz Button */}
+        {onOpenQuiz && (
+          <button
+            onClick={onOpenQuiz}
+            title="Take AI Pop Quiz for this section"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold text-xs border border-purple-200/80 transition-all shadow-2xs hover:scale-102 active:scale-98"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
+            <span className="hidden sm:inline">AI Quiz</span>
+          </button>
+        )}
 
         {/* Zoom Controls (hidden on very small phones, visible on tablets/desktops) */}
         <div className="hidden md:flex items-center gap-1 bg-purple-50/50 p-1 rounded-xl border border-purple-100 text-xs">

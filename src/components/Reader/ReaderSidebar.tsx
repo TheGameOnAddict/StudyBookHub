@@ -15,8 +15,10 @@ import {
   ExternalLink,
   ChevronDown,
   Clock,
+  Sparkles,
+  Award,
 } from 'lucide-react';
-import type { BookmarkItem, HighlightItem, NoteItem, TocItem } from '../../types';
+import type { BookmarkItem, ChapterQuizScore, HighlightItem, NoteItem, TocItem } from '../../types';
 import {
   countTotalChaptersAndCompleted,
   findActiveChapter,
@@ -48,6 +50,8 @@ interface ReaderSidebarProps {
   onResetChapter?: (item: TocItem) => void;
   onToggleAutoMark?: (chapterId: string) => void;
   studyTimeSeconds?: number;
+  onOpenQuiz?: (item: TocItem) => void;
+  quizScores?: Record<string, ChapterQuizScore>;
 }
 
 const TocItemRow: React.FC<{
@@ -61,6 +65,8 @@ const TocItemRow: React.FC<{
   disabledAutoMarkIds?: string[];
   onResetChapter?: (item: TocItem) => void;
   onToggleAutoMark?: (chapterId: string) => void;
+  onOpenQuiz?: (item: TocItem) => void;
+  quizScores?: Record<string, ChapterQuizScore>;
 }> = ({
   item,
   currentPage,
@@ -72,6 +78,8 @@ const TocItemRow: React.FC<{
   disabledAutoMarkIds = [],
   onResetChapter,
   onToggleAutoMark,
+  onOpenQuiz,
+  quizScores,
 }) => {
   const hasChildren = item.items && item.items.length > 0;
   const isWithinRange =
@@ -192,6 +200,30 @@ const TocItemRow: React.FC<{
               </button>
             )}
 
+            {/* Quiz score badge if already taken */}
+            {item.id && quizScores?.[item.id] && (
+              <span
+                className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 flex items-center gap-0.5"
+                title={`Last Quiz: ${quizScores[item.id].score}/${quizScores[item.id].total}`}
+              >
+                🎯 {quizScores[item.id].score}/{quizScores[item.id].total}
+              </span>
+            )}
+
+            {/* AI Pop Quiz Button */}
+            {onOpenQuiz && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenQuiz(item);
+                }}
+                title={`Take AI Pop Quiz for "${item.title}"`}
+                className="p-1 text-purple-500 hover:text-purple-800 hover:bg-purple-100 rounded-lg transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             <span
               className={`text-[10px] font-semibold font-mono px-1.5 py-0.5 rounded-full ${
                 isItemCompleted
@@ -246,6 +278,8 @@ const TocItemRow: React.FC<{
                 disabledAutoMarkIds={disabledAutoMarkIds}
                 onResetChapter={onResetChapter}
                 onToggleAutoMark={onToggleAutoMark}
+                onOpenQuiz={onOpenQuiz}
+                quizScores={quizScores}
               />
             ))}
           </div>
@@ -355,6 +389,30 @@ const TocItemRow: React.FC<{
             </button>
           )}
 
+          {/* Quiz score badge if already taken */}
+          {item.id && quizScores?.[item.id] && (
+            <span
+              className="text-[8px] font-bold font-mono px-1 py-0.2 rounded bg-purple-100 text-purple-700 shrink-0"
+              title={`Last Quiz: ${quizScores[item.id].score}/${quizScores[item.id].total}`}
+            >
+              🎯 {quizScores[item.id].score}/{quizScores[item.id].total}
+            </span>
+          )}
+
+          {/* AI Pop Quiz Button */}
+          {onOpenQuiz && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenQuiz(item);
+              }}
+              title={`Take AI Pop Quiz for "${item.title}"`}
+              className="p-0.5 text-purple-400 hover:text-purple-700 rounded transition-all"
+            >
+              <Sparkles className="w-3 h-3" />
+            </button>
+          )}
+
           <span
             className={`text-[9px] font-semibold font-mono px-1.5 py-0.2 rounded-full ${
               isItemCompleted
@@ -393,6 +451,8 @@ const TocItemRow: React.FC<{
               disabledAutoMarkIds={disabledAutoMarkIds}
               onResetChapter={onResetChapter}
               onToggleAutoMark={onToggleAutoMark}
+              onOpenQuiz={onOpenQuiz}
+              quizScores={quizScores}
             />
           ))}
         </div>
@@ -425,6 +485,8 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
   onResetChapter,
   onToggleAutoMark,
   studyTimeSeconds,
+  onOpenQuiz,
+  quizScores,
 }) => {
   const [activeTab, setActiveTab] = useState<'toc' | 'notes' | 'bookmarks'>('notes');
   const [searchQuery, setSearchQuery] = useState('');
@@ -663,6 +725,27 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                             )}
                           </button>
                         )}
+
+                        {activeTarget && onOpenQuiz && (
+                          <button
+                            onClick={() => onOpenQuiz(activeTarget)}
+                            title="Take AI Pop Quiz for this section"
+                            className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-all hover:scale-102 active:scale-98"
+                          >
+                            <Sparkles className="w-3 h-3 text-purple-200" />
+                            <span>AI Quiz</span>
+                          </button>
+                        )}
+
+                        {activeTarget?.id && quizScores?.[activeTarget.id] && (
+                          <span
+                            className="flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-lg bg-purple-200/80 text-purple-900"
+                            title={`Last Quiz Score: ${quizScores[activeTarget.id].score}/${quizScores[activeTarget.id].total}`}
+                          >
+                            <Award className="w-3 h-3 text-purple-700" />
+                            <span>{quizScores[activeTarget.id].score}/{quizScores[activeTarget.id].total}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -716,6 +799,8 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                       disabledAutoMarkIds={disabledAutoMarkIds}
                       onResetChapter={onResetChapter}
                       onToggleAutoMark={onToggleAutoMark}
+                      onOpenQuiz={onOpenQuiz}
+                      quizScores={quizScores}
                     />
                   ))}
                 </div>
@@ -993,6 +1078,30 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                                 className="p-0.5 text-gray-300 hover:text-rose-600 rounded transition-all"
                               >
                                 <RotateCcw className="w-3 h-3" />
+                              </button>
+                            )}
+
+                            {/* Quiz score badge if already taken */}
+                            {chap.id && quizScores?.[chap.id] && (
+                              <span
+                                className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 shrink-0"
+                                title={`Last Quiz: ${quizScores[chap.id].score}/${quizScores[chap.id].total}`}
+                              >
+                                🎯 {quizScores[chap.id].score}/{quizScores[chap.id].total}
+                              </span>
+                            )}
+
+                            {/* AI Pop Quiz Button */}
+                            {onOpenQuiz && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenQuiz(chap);
+                                }}
+                                title={`Take AI Pop Quiz for "${chap.title}"`}
+                                className="p-0.5 text-purple-400 hover:text-purple-700 rounded transition-all"
+                              >
+                                <Sparkles className="w-3 h-3" />
                               </button>
                             )}
 

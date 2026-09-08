@@ -22,21 +22,25 @@ import {
   saveNote,
   savePageDrawings,
   toggleBookmark,
+  saveChapterQuizScore,
 } from '../../services/db';
 import type {
   BookmarkItem,
+  ChapterQuizScore,
   DrawingTool,
   HighlightItem,
   HighlightRect,
   NoteItem,
   TocItem,
 } from '../../types';
+import { findActiveChapter } from '../../utils/chapterProgress';
 import { ReaderNavbar } from './ReaderNavbar';
 import { DrawingToolbar } from './DrawingToolbar';
 import { DrawingCanvas } from './DrawingCanvas';
 import { ReaderSidebar } from './ReaderSidebar';
 import { TextHighlightTooltip } from './TextHighlightTooltip';
 import { HighlightNotePopover } from './HighlightNotePopover';
+import { QuizModal } from './QuizModal';
 import { FileText, Loader2, Sparkles } from 'lucide-react';
 
 interface PdfViewerProps {
@@ -78,6 +82,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [readPages, setReadPages] = useState<number[]>([]);
   const [disabledAutoMarkChapters, setDisabledAutoMarkChapters] = useState<string[]>([]);
   const [studyTimeSeconds, setStudyTimeSeconds] = useState<number>(0);
+  const [quizScores, setQuizScores] = useState<Record<string, ChapterQuizScore>>({});
+  const [quizModalState, setQuizModalState] = useState<{
+    isOpen: boolean;
+    chapter: TocItem | null;
+  }>({ isOpen: false, chapter: null });
 
   // Drawing state
   const [isDrawingActive, setIsDrawingActive] = useState<boolean>(false);
@@ -172,6 +181,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         if (b.readPages) setReadPages(b.readPages);
         if (b.disabledAutoMarkChapters) setDisabledAutoMarkChapters(b.disabledAutoMarkChapters);
         if (b.studyTimeSeconds !== undefined) setStudyTimeSeconds(b.studyTimeSeconds);
+        if (b.quizScores) setQuizScores(b.quizScores);
         if (b.isCompleted !== undefined) setIsCompleted(b.isCompleted);
       }
     });
@@ -210,6 +220,31 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     if (book) {
       await saveBook({ ...book, isCompleted: next });
     }
+  };
+
+  const handleOpenQuiz = (chapterToQuiz?: TocItem | null) => {
+    if (chapterToQuiz) {
+      setQuizModalState({ isOpen: true, chapter: chapterToQuiz });
+      return;
+    }
+    const activeInfo = findActiveChapter(toc, currentPage);
+    const target =
+      activeInfo.subchapter ||
+      activeInfo.chapter ||
+      (toc.length > 0
+        ? toc[0]
+        : {
+            id: `current_section_${currentPage}`,
+            title: `Pages ${currentPage} - ${Math.min(totalPages, currentPage + 5)}`,
+            pageNumber: currentPage,
+            endPage: Math.min(totalPages, currentPage + 5),
+          });
+    setQuizModalState({ isOpen: true, chapter: target });
+  };
+
+  const handleSaveQuizScore = async (chapterId: string, score: number, total: number) => {
+    const updated = await saveChapterQuizScore(bookId, chapterId, score, total);
+    setQuizScores(updated);
   };
 
   // Render Page to Canvas + Text Layer
@@ -555,6 +590,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         notesCount={highlights.length + notes.length}
         initialStudyTimeSeconds={studyTimeSeconds}
         onStudyTimeUpdate={setStudyTimeSeconds}
+        onOpenQuiz={() => handleOpenQuiz()}
       />
 
       {/* Main Document Reading Area */}
@@ -727,6 +763,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         onResetChapter={handleResetChapter}
         onToggleAutoMark={handleToggleAutoMark}
         studyTimeSeconds={studyTimeSeconds}
+        onOpenQuiz={handleOpenQuiz}
+        quizScores={quizScores}
       />
 
       {/* Add Margin Note Modal */}
@@ -765,6 +803,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           </div>
         </div>
       )}
+
+      {/* AI Pop Quiz Modal */}
+      <QuizModal
+        isOpen={quizModalState.isOpen}
+        onClose={() => setQuizModalState({ isOpen: false, chapter: null })}
+        pdfDoc={pdfDoc}
+        chapter={quizModalState.chapter}
+        bookId={bookId}
+        onSaveScore={handleSaveQuizScore}
+      />
     </div>
   );
 };

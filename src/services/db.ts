@@ -382,3 +382,25 @@ export async function importStudyData(data: AppSyncData): Promise<{ booksUpdated
     notesUpdated: data.notes.length + data.highlights.length,
   };
 }
+
+export async function saveChapterQuizScore(
+  bookId: string,
+  chapterId: string,
+  score: number,
+  total: number
+): Promise<Record<string, { score: number; total: number; timestamp: number }>> {
+  const book = await db.books.get(bookId);
+  if (!book) return {};
+  const currentScores = book.quizScores || {};
+  const updatedScores = {
+    ...currentScores,
+    [chapterId]: {
+      score,
+      total,
+      timestamp: Date.now(),
+    },
+  };
+  await db.books.update(bookId, { quizScores: updatedScores });
+  return updatedScores;
+}
+

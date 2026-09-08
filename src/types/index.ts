@@ -13,6 +13,7 @@ export interface Book {
   readPages?: number[]; // Distinct page numbers completed/visited
   disabledAutoMarkChapters?: string[]; // Chapter/subchapter IDs with auto-mark disabled
   studyTimeSeconds?: number; // Total study time spent in seconds
+  quizScores?: Record<string, ChapterQuizScore>; // Map chapterId -> last quiz score
   coverDataUrl?: string;
   pdfBlob?: Blob; // Stored locally in IndexedDB for instant offline opening
 }
@@ -94,3 +95,19 @@ export interface AppSyncData {
   notes: NoteItem[];
   bookmarks: BookmarkItem[];
 }
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswerIndex: number; // 0 to 3
+  explanation: string;
+  relevantPage?: number;
+}
+
+export interface ChapterQuizScore {
+  score: number;
+  total: number;
+  timestamp: number;
+}
+
