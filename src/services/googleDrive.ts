@@ -30,13 +30,17 @@ declare global {
   }
 }
 
+const DEFAULT_CLIENT_ID = '97366874280-8c2o47ci9r3s6ak3jrq93m2j9chmttgq.apps.googleusercontent.com';
+
 /**
- * Resolves the Google OAuth Client ID from Vite environment or localStorage
+ * Resolves the Google OAuth Client ID from Vite environment, localStorage, or built-in default
  */
 export function getConfiguredClientId(): string {
   const envClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim();
   if (envClientId) return envClientId;
-  return localStorage.getItem(CLIENT_ID_STORAGE_KEY)?.trim() || '';
+  const stored = localStorage.getItem(CLIENT_ID_STORAGE_KEY)?.trim();
+  if (stored) return stored;
+  return DEFAULT_CLIENT_ID;
 }
 
 export function saveClientId(clientId: string): void {
