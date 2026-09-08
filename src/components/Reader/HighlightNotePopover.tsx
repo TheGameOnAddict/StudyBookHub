@@ -35,14 +35,18 @@ export const HighlightNotePopover: React.FC<HighlightNotePopoverProps> = ({
   };
 
   return (
-    <div
-      className="fixed z-50 transform -translate-x-1/2 -translate-y-full mb-3 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl shadow-purple-900/20 border border-purple-200 p-3 text-xs flex flex-col gap-2.5 w-72 sm:w-80 max-w-[90vw] animate-in fade-in zoom-in-95 duration-150"
-      style={{
-        left: `${Math.max(160, Math.min(window.innerWidth - 160, position.x))}px`,
-        top: `${Math.max(100, position.y)}px`,
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <>
+      {/* Click-away backdrop */}
+      <div className="fixed inset-0 z-40 bg-transparent" onClick={onClose} />
+
+      <div
+        className="fixed z-50 transform -translate-x-1/2 -translate-y-full mb-3 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl shadow-purple-900/20 border border-purple-200 p-3 text-xs flex flex-col gap-2.5 w-72 sm:w-80 max-w-[90vw] animate-in fade-in zoom-in-95 duration-150"
+        style={{
+          left: `${Math.max(160, Math.min(window.innerWidth - 160, position.x))}px`,
+          top: `${Math.max(100, position.y)}px`,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
       {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-purple-100 pb-2">
         <div className="flex items-center gap-2">
@@ -162,5 +166,6 @@ export const HighlightNotePopover: React.FC<HighlightNotePopoverProps> = ({
         </span>
       </div>
     </div>
+    </>
   );
 };

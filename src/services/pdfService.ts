@@ -40,29 +40,42 @@ export async function extractPdfOutline(pdfDoc: pdfjsLib.PDFDocumentProxy): Prom
     const outline = await pdfDoc.getOutline();
     if (!outline || outline.length === 0) return [];
 
+    const resolveDest = async (destInput: any): Promise<number | null> => {
+      try {
+        let dest = destInput;
+        if (typeof dest === 'string') {
+          dest = await pdfDoc.getDestination(dest);
+        }
+        if (Array.isArray(dest) && dest.length > 0) {
+          const first = dest[0];
+          if (typeof first === 'number') {
+            return first + 1;
+          }
+          if (first && typeof first === 'object') {
+            const pageIdx = await pdfDoc.getPageIndex(first);
+            return pageIdx + 1;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not resolve TOC destination:', destInput, err);
+      }
+      return null;
+    };
+
     const parseItems = async (items: any[]): Promise<TocItem[]> => {
       const results: TocItem[] = [];
       for (const item of items) {
-        let pageNum = 1;
-        try {
-          if (item.dest) {
-            let dest = item.dest;
-            if (typeof dest === 'string') {
-              dest = await pdfDoc.getDestination(dest);
-            }
-            if (Array.isArray(dest) && dest[0]) {
-              const pageIndex = await pdfDoc.getPageIndex(dest[0]);
-              pageNum = pageIndex + 1;
-            }
-          }
-        } catch (e) {
-          console.warn('Could not resolve TOC destination:', e);
+        let pageNum: number | null = null;
+        if (item.dest) {
+          pageNum = await resolveDest(item.dest);
         }
 
         const subItems = item.items && item.items.length > 0 ? await parseItems(item.items) : undefined;
+        const finalPage = pageNum || subItems?.[0]?.pageNumber || 1;
+
         results.push({
-          title: item.title || 'Untitled Section',
-          pageNumber: pageNum,
+          title: item.title ? item.title.trim() : 'Untitled Section',
+          pageNumber: finalPage,
           items: subItems,
         });
       }

@@ -374,7 +374,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }
     setTimeout(() => {
       setPulsingHighlightId((curr) => (curr === highlightId ? null : curr));
-    }, 3500);
+    }, 1200);
   };
 
   // If initialHighlightId changes (e.g. from search)
@@ -383,7 +383,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       setPulsingHighlightId(initialHighlightId);
       const timer = setTimeout(() => {
         setPulsingHighlightId((curr) => (curr === initialHighlightId ? null : curr));
-      }, 3500);
+      }, 1200);
       return () => clearTimeout(timer);
     }
   }, [initialHighlightId]);
@@ -523,8 +523,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           {/* PDF Page Canvas */}
           <canvas ref={pageCanvasRef} className="block pointer-events-none" />
 
-          {/* Visual Text Highlights Layer */}
-          <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+          {/* Text Layer for Selection & Native Text Highlighting */}
+          <div ref={textLayerRef} className="textLayer z-10" />
+
+          {/* Visual Text Highlights Layer (z-20 above text layer so clicking works reliably) */}
+          <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
             {highlights
               .filter((hl) => hl.pageNumber === currentPage)
               .map((hl) => {
@@ -552,8 +555,15 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                             ? `Note: ${hl.note} (Click to view)`
                             : `Highlight: "${hl.text}" (Click to view note)`
                         }
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          e.preventDefault();
                           const clientRect = e.currentTarget.getBoundingClientRect();
                           setActivePopoverHighlight({
                             highlight: hl,
@@ -568,9 +578,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                 );
               })}
           </div>
-
-          {/* Text Layer for Selection & Native Text Highlighting */}
-          <div ref={textLayerRef} className="textLayer z-15" />
 
           {/* Transparent Stylus / Touch Annotation Overlay */}
           {pageSize.width > 0 && pageSize.height > 0 && (

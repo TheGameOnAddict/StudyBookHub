@@ -9,6 +9,7 @@ import {
   Trash2,
   FileDown,
   ExternalLink,
+  ChevronDown,
 } from 'lucide-react';
 import type { BookmarkItem, HighlightItem, NoteItem, TocItem } from '../../types';
 import confetti from 'canvas-confetti';
@@ -31,6 +32,79 @@ interface ReaderSidebarProps {
   isCompleted?: boolean;
   onToggleCompleted?: () => void;
 }
+
+const TocItemRow: React.FC<{
+  item: TocItem;
+  currentPage: number;
+  onJumpToPage: (page: number) => void;
+  depth?: number;
+}> = ({ item, currentPage, onJumpToPage, depth = 0 }) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+  const hasChildren = item.items && item.items.length > 0;
+  const isCurrent = currentPage === item.pageNumber;
+
+  return (
+    <div className="space-y-0.5">
+      <div
+        className={`w-full text-left px-2 py-1.5 rounded-xl text-xs flex items-center justify-between group transition-all ${
+          isCurrent
+            ? 'bg-purple-100 text-purple-950 font-bold shadow-xs'
+            : 'hover:bg-purple-50 text-gray-700'
+        }`}
+        style={{ paddingLeft: `${Math.min(depth * 12 + 6, 44)}px` }}
+      >
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {hasChildren ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(!isExpanded);
+              }}
+              className="p-0.5 text-gray-400 hover:text-purple-700 rounded transition-transform"
+            >
+              <ChevronDown
+                className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                  isExpanded ? 'rotate-0' : '-rotate-90'
+                }`}
+              />
+            </button>
+          ) : (
+            <div className="w-3.5 h-3.5 shrink-0" />
+          )}
+
+          <button
+            onClick={() => onJumpToPage(item.pageNumber)}
+            className="truncate text-left flex-1 hover:text-purple-800"
+            title={item.title}
+          >
+            {item.title}
+          </button>
+        </div>
+
+        <button
+          onClick={() => onJumpToPage(item.pageNumber)}
+          className="text-[10px] text-purple-600 font-mono shrink-0 pl-1.5 hover:underline"
+        >
+          p.{item.pageNumber}
+        </button>
+      </div>
+
+      {hasChildren && isExpanded && (
+        <div className="space-y-0.5">
+          {item.items!.map((child, cIdx) => (
+            <TocItemRow
+              key={`${child.title}_${cIdx}`}
+              item={child}
+              currentPage={currentPage}
+              onJumpToPage={onJumpToPage}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
   isOpen,
@@ -181,22 +255,17 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                 No embedded Table of Contents found in this PDF.
               </div>
             ) : (
-              toc.map((item, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => onJumpToPage(item.pageNumber)}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between group transition-all ${
-                    currentPage === item.pageNumber
-                      ? 'bg-purple-100 text-purple-900 font-semibold'
-                      : 'hover:bg-purple-50 text-gray-700'
-                  }`}
-                >
-                  <span className="truncate pr-2">{item.title}</span>
-                  <span className="text-[10px] text-purple-500 font-mono shrink-0">
-                    p.{item.pageNumber}
-                  </span>
-                </button>
-              ))
+              <div className="space-y-1">
+                {toc.map((item, idx) => (
+                  <TocItemRow
+                    key={`${item.title}_${idx}`}
+                    item={item}
+                    currentPage={currentPage}
+                    onJumpToPage={onJumpToPage}
+                    depth={0}
+                  />
+                ))}
+              </div>
             )}
           </div>
         )}
