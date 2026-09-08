@@ -3,7 +3,6 @@ import {
   BookOpen,
   Plus,
   Search,
-  Cloud,
   CheckCircle2,
   Highlighter,
   UploadCloud,
@@ -15,6 +14,11 @@ import type { Book } from '../../types';
 import { BookCard } from './BookCard';
 import { generatePdfThumbnail, loadPdfDocument } from '../../services/pdfService';
 import { saveBook } from '../../services/db';
+import {
+  isGoogleSignedIn,
+  getSavedUserProfile,
+  scheduleAutoSync,
+} from '../../services/googleDrive';
 
 interface LibraryDashboardProps {
   books: Book[];
@@ -43,6 +47,8 @@ export const LibraryDashboard: React.FC<LibraryDashboardProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const userProfile = isGoogleSignedIn() ? getSavedUserProfile() : null;
 
   // Filter books
   const filteredBooks = books.filter((b) => {
@@ -86,6 +92,7 @@ export const LibraryDashboard: React.FC<LibraryDashboardProps> = ({
 
       await saveBook(newBook);
       onRefreshBooks();
+      scheduleAutoSync(2000);
     } catch (err) {
       console.error('Failed to parse PDF textbook:', err);
       alert('Failed to process PDF. Please try another file.');
@@ -145,15 +152,58 @@ export const LibraryDashboard: React.FC<LibraryDashboardProps> = ({
             <span className="hidden md:inline">Search (Notes & Books)</span>
           </button>
 
-          {/* Cloud Sync */}
-          <button
-            onClick={onOpenSync}
-            className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-700 text-xs font-semibold rounded-xl border border-purple-200/80 shadow-xs transition-all"
-            title="Sync & Backup"
-          >
-            <Cloud className="w-3.5 h-3.5 text-purple-600" />
-            <span className="hidden sm:inline">Cloud Sync</span>
-          </button>
+          {/* Cloud Sync / Google Profile Pill */}
+          {userProfile ? (
+            <button
+              onClick={onOpenSync}
+              className="flex items-center gap-2 px-2.5 py-1.5 bg-white hover:bg-purple-50 text-gray-800 rounded-xl border border-purple-200/80 shadow-2xs transition-all"
+              title="Google Drive Sync Connected - Click to view status or backup"
+            >
+              {userProfile.picture ? (
+                <img
+                  src={userProfile.picture}
+                  alt={userProfile.name}
+                  className="w-5 h-5 rounded-full border border-purple-300 shrink-0"
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                  {userProfile.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold max-w-[85px] truncate hidden sm:inline">
+                  {userProfile.name.split(' ')[0]}
+                </span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Connected to Google Drive AppData" />
+              </div>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenSync}
+              className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-700 text-xs font-semibold rounded-xl border border-purple-200/80 shadow-2xs transition-all"
+              title="Sign in with Google to sync notes across devices"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24Z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15Z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z"
+                />
+              </svg>
+              <span className="hidden sm:inline">Google Sync</span>
+            </button>
+          )}
 
           {/* Add Textbook Button */}
           <button
