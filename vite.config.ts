@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  base: '/StudyBookHub/', // Ensures correct asset resolution on GitHub Pages
+  base: '/', // Configured for custom domain studybookhub.us
   build: {
     target: 'esnext',
   }
