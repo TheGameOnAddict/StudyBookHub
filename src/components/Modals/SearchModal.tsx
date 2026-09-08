@@ -11,12 +11,13 @@ interface SearchResult {
   snippet: string;
   subText?: string;
   color?: string;
+  highlightId?: string;
 }
 
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectResult: (bookId: string, pageNumber: number) => void;
+  onSelectResult: (bookId: string, pageNumber: number, highlightId?: string) => void;
 }
 
 export const SearchModal: React.FC<SearchModalProps> = ({
@@ -88,6 +89,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               snippet: hl.text,
               subText: hl.note ? `Note: ${hl.note}` : undefined,
               color: hl.color,
+              highlightId: hl.id,
             });
           }
         });
@@ -173,7 +175,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               <div
                 key={index}
                 onClick={() => {
-                  onSelectResult(res.bookId, res.pageNumber);
+                  onSelectResult(res.bookId, res.pageNumber, res.highlightId);
                   onClose();
                 }}
                 className="p-3 rounded-2xl border border-purple-100/70 hover:bg-purple-50/50 hover:border-purple-200 cursor-pointer transition-all flex items-start justify-between gap-3 group"

@@ -19,6 +19,7 @@ interface ReaderSidebarProps {
   currentPage: number;
   totalPages: number;
   onJumpToPage: (page: number) => void;
+  onJumpToHighlight?: (pageNumber: number, highlightId: string) => void;
   toc: TocItem[];
   highlights: HighlightItem[];
   notes: NoteItem[];
@@ -37,6 +38,7 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
   currentPage,
   totalPages,
   onJumpToPage,
+  onJumpToHighlight,
   toc,
   highlights,
   notes,
@@ -245,8 +247,12 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                       </span>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => onJumpToPage(hl.pageNumber)}
-                          title="Jump to page"
+                          onClick={() =>
+                            onJumpToHighlight
+                              ? onJumpToHighlight(hl.pageNumber, hl.id)
+                              : onJumpToPage(hl.pageNumber)
+                          }
+                          title="Jump to highlight"
                           className="p-1 text-purple-600 hover:bg-purple-100 rounded"
                         >
                           <ExternalLink className="w-3 h-3" />
@@ -261,7 +267,11 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                       </div>
                     </div>
                     <p
-                      onClick={() => onJumpToPage(hl.pageNumber)}
+                      onClick={() =>
+                        onJumpToHighlight
+                          ? onJumpToHighlight(hl.pageNumber, hl.id)
+                          : onJumpToPage(hl.pageNumber)
+                      }
                       className="cursor-pointer text-gray-700 italic border-l-2 border-purple-300 pl-2 line-clamp-3 hover:text-purple-900"
                     >
                       "{hl.text}"

@@ -23,6 +23,7 @@ export const App: React.FC = () => {
   // Modals
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSyncOpen, setIsSyncOpen] = useState(false);
+  const [initialHighlightId, setInitialHighlightId] = useState<string | null>(null);
 
   // Fallback file picker for unlinked books
   const fallbackFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -101,9 +102,10 @@ export const App: React.FC = () => {
   };
 
   // Handle select search result
-  const handleSelectSearchResult = async (bookId: string, pageNumber: number) => {
+  const handleSelectSearchResult = async (bookId: string, pageNumber: number, highlightId?: string) => {
     const book = await getBook(bookId);
     if (book) {
+      setInitialHighlightId(highlightId || null);
       handleOpenBook(book, pageNumber);
     }
   };
@@ -136,11 +138,13 @@ export const App: React.FC = () => {
           bookId={activeBook.id}
           bookTitle={activeBook.title}
           initialPage={activePage}
+          initialHighlightId={initialHighlightId}
           pdfSource={activeBook.pdfBlob}
           isCompleted={activeBook.isCompleted}
           onBackToLibrary={() => {
             setCurrentView('library');
             setActiveBook(null);
+            setInitialHighlightId(null);
             refreshLibrary();
           }}
         />

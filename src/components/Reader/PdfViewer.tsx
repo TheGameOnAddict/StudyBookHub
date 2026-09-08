@@ -31,12 +31,14 @@ import { DrawingToolbar } from './DrawingToolbar';
 import { DrawingCanvas } from './DrawingCanvas';
 import { ReaderSidebar } from './ReaderSidebar';
 import { TextHighlightTooltip } from './TextHighlightTooltip';
+import { HighlightNotePopover } from './HighlightNotePopover';
 import { FileText, Loader2, Sparkles } from 'lucide-react';
 
 interface PdfViewerProps {
   bookId: string;
   bookTitle: string;
   initialPage?: number;
+  initialHighlightId?: string | null;
   pdfSource: Blob | ArrayBuffer;
   onBackToLibrary: () => void;
   isCompleted?: boolean;
@@ -46,6 +48,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   bookId,
   bookTitle,
   initialPage = 1,
+  initialHighlightId = null,
   pdfSource,
   onBackToLibrary,
   isCompleted: initialIsCompleted = false,
@@ -79,6 +82,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     y: number;
     text: string;
     rects: HighlightRect[];
+  } | null>(null);
+
+  // Pulsing highlight state
+  const [pulsingHighlightId, setPulsingHighlightId] = useState<string | null>(initialHighlightId || null);
+
+  // Clicked highlight note popover state
+  const [activePopoverHighlight, setActivePopoverHighlight] = useState<{
+    highlight: HighlightItem;
+    x: number;
+    y: number;
   } | null>(null);
 
   // Quick note dialog state
@@ -352,6 +365,60 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     return found;
   };
 
+  // Jump to specific highlight handler (pulses highlight and scrolls to view)
+  const handleJumpToHighlight = (pageNumber: number, highlightId: string) => {
+    setCurrentPage(pageNumber);
+    setPulsingHighlightId(highlightId);
+    if (window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
+    setTimeout(() => {
+      setPulsingHighlightId((curr) => (curr === highlightId ? null : curr));
+    }, 3500);
+  };
+
+  // If initialHighlightId changes (e.g. from search)
+  useEffect(() => {
+    if (initialHighlightId) {
+      setPulsingHighlightId(initialHighlightId);
+      const timer = setTimeout(() => {
+        setPulsingHighlightId((curr) => (curr === initialHighlightId ? null : curr));
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [initialHighlightId]);
+
+  // Scroll pulsing highlight into view smoothly
+  useEffect(() => {
+    if (!pulsingHighlightId) return;
+    const timer = setTimeout(() => {
+      const el = document.querySelector('.highlight-pulse');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [pulsingHighlightId, currentPage]);
+
+  // Update attached note on a highlight
+  const handleUpdateHighlightNote = async (highlightId: string, newNote: string) => {
+    const hl = highlights.find((h) => h.id === highlightId);
+    if (hl) {
+      const updated: HighlightItem = {
+        ...hl,
+        note: newNote || undefined,
+      };
+      await addHighlight(updated);
+      if (activePopoverHighlight?.highlight.id === highlightId) {
+        setActivePopoverHighlight({
+          ...activePopoverHighlight,
+          highlight: updated,
+        });
+      }
+      refreshAnnotations();
+    }
+  };
+
   // Bookmark toggling
   const handleBookmarkToggle = async () => {
     const newState = await toggleBookmark(bookId, currentPage);
@@ -462,12 +529,15 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
               .filter((hl) => hl.pageNumber === currentPage)
               .map((hl) => {
                 const rects = getHighlightRects(hl);
+                const isPulsing = hl.id === pulsingHighlightId;
                 return (
                   <div key={hl.id} className="contents">
                     {rects.map((rect, rIdx) => (
                       <div
                         key={`${hl.id}_${rIdx}`}
-                        className="absolute pointer-events-auto cursor-pointer rounded-xs transition-opacity hover:opacity-80"
+                        className={`absolute pointer-events-auto cursor-pointer rounded-xs transition-all ${
+                          isPulsing ? 'highlight-pulse' : 'hover:opacity-85'
+                        }`}
                         style={{
                           left: `${rect.x * pageSize.width}px`,
                           top: `${rect.y * pageSize.height}px`,
@@ -475,12 +545,22 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                           height: `${rect.height * pageSize.height}px`,
                           backgroundColor: hl.color,
                           mixBlendMode: 'multiply',
-                          opacity: 0.5,
+                          opacity: isPulsing ? 0.8 : 0.5,
                         }}
-                        title={hl.note ? `Note: ${hl.note}` : `Highlight: "${hl.text}"`}
+                        title={
+                          hl.note
+                            ? `Note: ${hl.note} (Click to view)`
+                            : `Highlight: "${hl.text}" (Click to view note)`
+                        }
                         onClick={(e) => {
                           e.stopPropagation();
-                          setIsSidebarOpen(true);
+                          const clientRect = e.currentTarget.getBoundingClientRect();
+                          setActivePopoverHighlight({
+                            highlight: hl,
+                            x: clientRect.left + clientRect.width / 2,
+                            y: clientRect.top,
+                          });
+                          setPulsingHighlightId(hl.id);
                         }}
                       />
                     ))}
@@ -531,6 +611,25 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         />
       )}
 
+      {/* Clicked Highlight Note Popover */}
+      {activePopoverHighlight && (
+        <HighlightNotePopover
+          highlight={activePopoverHighlight.highlight}
+          position={{ x: activePopoverHighlight.x, y: activePopoverHighlight.y }}
+          onClose={() => setActivePopoverHighlight(null)}
+          onUpdateNote={handleUpdateHighlightNote}
+          onDeleteHighlight={async (id) => {
+            await deleteHighlight(id);
+            setActivePopoverHighlight(null);
+            refreshAnnotations();
+          }}
+          onOpenInSidebar={() => {
+            setIsSidebarOpen(true);
+            setActivePopoverHighlight(null);
+          }}
+        />
+      )}
+
       {/* Collapsible Sidebar */}
       <ReaderSidebar
         isOpen={isSidebarOpen}
@@ -541,6 +640,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           setCurrentPage(p);
           if (window.innerWidth < 768) setIsSidebarOpen(false);
         }}
+        onJumpToHighlight={handleJumpToHighlight}
         toc={toc}
         highlights={highlights}
         notes={notes}
