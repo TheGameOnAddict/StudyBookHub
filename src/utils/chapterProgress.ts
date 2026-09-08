@@ -6,6 +6,8 @@ export interface ChapterProgressInfo {
   totalPages: number;
   startPage: number;
   endPage: number;
+  isFullyRead: boolean;
+  isAutoMarkDisabled?: boolean;
 }
 
 /**
@@ -44,24 +46,28 @@ export function findActiveChapter(
 }
 
 /**
- * Calculates page progress for a specific chapter or subchapter
+ * Calculates page progress for a specific chapter or subchapter based on distinct read pages
  */
 export function getChapterPageProgress(
   item: TocItem,
-  currentPage: number
+  readPages: number[] = [],
+  disabledAutoMarkIds: string[] = []
 ): ChapterProgressInfo {
   const start = item.pageNumber;
   const end = item.endPage || start;
   const total = Math.max(1, end - start + 1);
 
+  const readSet = new Set(readPages);
   let pagesRead = 0;
-  if (currentPage >= end) {
-    pagesRead = total;
-  } else if (currentPage >= start) {
-    pagesRead = currentPage - start + 1;
+  for (let p = start; p <= end; p++) {
+    if (readSet.has(p)) {
+      pagesRead++;
+    }
   }
 
   const progress = Math.min(100, Math.round((pagesRead / total) * 100));
+  const isFullyRead = pagesRead === total;
+  const isAutoMarkDisabled = !!(item.id && disabledAutoMarkIds.includes(item.id));
 
   return {
     progress,
@@ -69,6 +75,8 @@ export function getChapterPageProgress(
     totalPages: total,
     startPage: start,
     endPage: end,
+    isFullyRead,
+    isAutoMarkDisabled,
   };
 }
 

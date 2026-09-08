@@ -10,6 +10,8 @@ export interface Book {
   lastReadAt: number;
   isCompleted?: boolean;
   completedChapters?: string[]; // IDs of studied chapters/subchapters
+  readPages?: number[]; // Distinct page numbers completed/visited
+  disabledAutoMarkChapters?: string[]; // Chapter/subchapter IDs with auto-mark disabled
   coverDataUrl?: string;
   pdfBlob?: Blob; // Stored locally in IndexedDB for instant offline opening
 }

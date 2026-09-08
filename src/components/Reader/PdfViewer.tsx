@@ -15,11 +15,13 @@ import {
   getBook,
   saveBook,
   toggleChapterCompleted,
+  recordPageVisit,
+  resetChapterProgress,
+  toggleAutoMarkChapter,
   isBookmarked as checkIsBookmarked,
   saveNote,
   savePageDrawings,
   toggleBookmark,
-  updateBookProgress,
 } from '../../services/db';
 import type {
   BookmarkItem,
@@ -73,6 +75,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [isCurrentBookmarked, setIsCurrentBookmarked] = useState<boolean>(false);
   const [isCompleted, setIsCompleted] = useState<boolean>(initialIsCompleted);
   const [completedChapters, setCompletedChapters] = useState<string[]>([]);
+  const [readPages, setReadPages] = useState<number[]>([]);
+  const [disabledAutoMarkChapters, setDisabledAutoMarkChapters] = useState<string[]>([]);
 
   // Drawing state
   const [isDrawingActive, setIsDrawingActive] = useState<boolean>(false);
@@ -159,19 +163,42 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     refreshAnnotations();
   }, [refreshAnnotations]);
 
-  // Load book metadata including chapter completion state
+  // Load book metadata including chapter completion state, read pages, and auto-mark settings
   useEffect(() => {
     getBook(bookId).then((b) => {
       if (b) {
         if (b.completedChapters) setCompletedChapters(b.completedChapters);
+        if (b.readPages) setReadPages(b.readPages);
+        if (b.disabledAutoMarkChapters) setDisabledAutoMarkChapters(b.disabledAutoMarkChapters);
         if (b.isCompleted !== undefined) setIsCompleted(b.isCompleted);
       }
     });
   }, [bookId]);
 
+  // Record page visit and execute auto-mark completion for finished chapters/subchapters
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > 0) {
+      recordPageVisit(bookId, currentPage, totalPages, toc).then((res) => {
+        setReadPages(res.readPages);
+        setCompletedChapters(res.completedChapters);
+      });
+    }
+  }, [bookId, currentPage, totalPages, toc]);
+
   const handleToggleChapter = async (chapterId: string) => {
     const updated = await toggleChapterCompleted(bookId, chapterId);
     setCompletedChapters(updated);
+  };
+
+  const handleToggleAutoMark = async (chapterId: string) => {
+    const updated = await toggleAutoMarkChapter(bookId, chapterId);
+    setDisabledAutoMarkChapters(updated);
+  };
+
+  const handleResetChapter = async (chapterItem: TocItem) => {
+    const res = await resetChapterProgress(bookId, chapterItem);
+    setReadPages(res.readPages);
+    setCompletedChapters(res.completedChapters);
   };
 
   const handleToggleCompleted = async () => {
@@ -182,13 +209,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       await saveBook({ ...book, isCompleted: next });
     }
   };
-
-  // Update reading progress in IndexedDB whenever currentPage or totalPages changes
-  useEffect(() => {
-    if (totalPages > 0) {
-      updateBookProgress(bookId, currentPage, totalPages);
-    }
-  }, [bookId, currentPage, totalPages]);
 
   // Render Page to Canvas + Text Layer
   useEffect(() => {
@@ -697,6 +717,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         onToggleCompleted={handleToggleCompleted}
         completedChapterIds={completedChapters}
         onToggleChapter={handleToggleChapter}
+        readPages={readPages}
+        disabledAutoMarkIds={disabledAutoMarkChapters}
+        onResetChapter={handleResetChapter}
+        onToggleAutoMark={handleToggleAutoMark}
       />
 
       {/* Add Margin Note Modal */}

@@ -91,19 +91,25 @@ html, body {
   color: transparent;
 }
 
-/* Subtle clean highlight outline flash - 100% readable text, no rounded corners */
-@keyframes highlightSubtleFlash {
+/* Energetic clean highlight pop - vibrant dual glow + 1.8% pop, 100% readable text */
+@keyframes highlightEnergeticPop {
   0%, 100% {
-    outline: 1.5px solid transparent;
+    transform: scale(1);
+    box-shadow: 0 0 0 0px transparent;
+    filter: brightness(1);
+    opacity: 0.45;
   }
   50% {
-    outline: 1.5px solid #7C3AED;
+    transform: scale(1.018);
+    box-shadow: 0 0 0 2px #7C3AED, 0 0 10px rgba(139, 92, 246, 0.55);
+    filter: brightness(1.22);
+    opacity: 0.68;
   }
 }
 
 .highlight-pulse {
-  animation: highlightSubtleFlash 0.45s ease-in-out 2 !important;
+  animation: highlightEnergeticPop 0.45s ease-in-out 2 !important;
   border-radius: 0px !important;
-  outline-offset: 0.5px !important;
+  z-index: 30 !important;
 }
 

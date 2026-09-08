@@ -7,6 +7,7 @@ import type {
   HighlightItem,
   NoteItem,
   PageDrawings,
+  TocItem,
 } from '../types';
 
 export class StudyBookHubDatabase extends Dexie {
@@ -69,6 +70,128 @@ export async function toggleChapterCompleted(bookId: string, chapterId: string):
   }
   const updated = Array.from(currentCompleted);
   await db.books.update(bookId, { completedChapters: updated });
+  return updated;
+}
+
+export async function recordPageVisit(
+  bookId: string,
+  currentPage: number,
+  totalPages: number,
+  toc: TocItem[]
+): Promise<{ readPages: number[]; completedChapters: string[]; progress: number }> {
+  const book = await db.books.get(bookId);
+  if (!book) return { readPages: [currentPage], completedChapters: [], progress: 0 };
+
+  const readPagesSet = new Set(book.readPages || []);
+  readPagesSet.add(currentPage);
+  const updatedReadPages = Array.from(readPagesSet).sort((a, b) => a - b);
+
+  // Overall book progress based on count of unique pages read out of totalPages
+  const progress = totalPages > 0 ? Math.min(100, Math.round((updatedReadPages.length / totalPages) * 100)) : 0;
+  const isCompleted = progress >= 100;
+
+  // Auto-mark check for chapters & subchapters
+  const completedSet = new Set(book.completedChapters || []);
+  const disabledAutoMarkSet = new Set(book.disabledAutoMarkChapters || []);
+
+  const checkAutoMark = (items: TocItem[]) => {
+    for (const item of items) {
+      if (item.id && !disabledAutoMarkSet.has(item.id)) {
+        const start = item.pageNumber;
+        const end = item.endPage || start;
+        let allRead = true;
+        for (let p = start; p <= end; p++) {
+          if (!readPagesSet.has(p)) {
+            allRead = false;
+            break;
+          }
+        }
+        if (allRead) {
+          completedSet.add(item.id);
+        }
+      }
+      if (item.items && item.items.length > 0) {
+        checkAutoMark(item.items);
+      }
+    }
+  };
+
+  if (toc && toc.length > 0) {
+    checkAutoMark(toc);
+  }
+
+  const updatedCompletedChapters = Array.from(completedSet);
+
+  await db.books.update(bookId, {
+    currentPage,
+    readPages: updatedReadPages,
+    completedChapters: updatedCompletedChapters,
+    progress,
+    lastReadAt: Date.now(),
+    isCompleted,
+  });
+
+  return {
+    readPages: updatedReadPages,
+    completedChapters: updatedCompletedChapters,
+    progress,
+  };
+}
+
+export async function resetChapterProgress(
+  bookId: string,
+  chapter: TocItem
+): Promise<{ readPages: number[]; completedChapters: string[]; progress: number }> {
+  const book = await db.books.get(bookId);
+  if (!book) return { readPages: [], completedChapters: [], progress: 0 };
+
+  const start = chapter.pageNumber;
+  const end = chapter.endPage || start;
+
+  // Collect all chapter IDs to uncomplete (this item + any child subchapters)
+  const idsToRemove = new Set<string>();
+  const collectIds = (item: TocItem) => {
+    if (item.id) idsToRemove.add(item.id);
+    if (item.items) item.items.forEach(collectIds);
+  };
+  collectIds(chapter);
+
+  // Remove pages within this section from readPages
+  const updatedReadPages = (book.readPages || []).filter((p) => p < start || p > end);
+
+  // Remove chapter and subchapters from completedChapters
+  const updatedCompleted = (book.completedChapters || []).filter((id) => !idsToRemove.has(id));
+
+  // Recalculate overall book progress
+  const progress = book.totalPages > 0
+    ? Math.min(100, Math.round((updatedReadPages.length / book.totalPages) * 100))
+    : 0;
+
+  await db.books.update(bookId, {
+    readPages: updatedReadPages,
+    completedChapters: updatedCompleted,
+    progress,
+    isCompleted: progress >= 100,
+  });
+
+  return {
+    readPages: updatedReadPages,
+    completedChapters: updatedCompleted,
+    progress,
+  };
+}
+
+export async function toggleAutoMarkChapter(bookId: string, chapterId: string): Promise<string[]> {
+  const book = await db.books.get(bookId);
+  if (!book) return [];
+  const currentDisabled = new Set(book.disabledAutoMarkChapters || []);
+  if (currentDisabled.has(chapterId)) {
+    currentDisabled.delete(chapterId); // enable auto-mark
+  } else {
+    currentDisabled.add(chapterId); // disable auto-mark
+  }
+  const updated = Array.from(currentDisabled);
+  await db.books.update(bookId, { disabledAutoMarkChapters: updated });
   return updated;
 }
 

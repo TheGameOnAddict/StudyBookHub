@@ -7,6 +7,9 @@ import {
   Search,
   CheckCircle2,
   Circle,
+  RotateCcw,
+  Zap,
+  ZapOff,
   Trash2,
   FileDown,
   ExternalLink,
@@ -39,6 +42,10 @@ interface ReaderSidebarProps {
   onToggleCompleted?: () => void;
   completedChapterIds?: string[];
   onToggleChapter?: (id: string) => void;
+  readPages?: number[];
+  disabledAutoMarkIds?: string[];
+  onResetChapter?: (item: TocItem) => void;
+  onToggleAutoMark?: (chapterId: string) => void;
 }
 
 const TocItemRow: React.FC<{
@@ -48,6 +55,10 @@ const TocItemRow: React.FC<{
   depth?: number;
   completedChapterIds?: string[];
   onToggleChapter?: (id: string) => void;
+  readPages?: number[];
+  disabledAutoMarkIds?: string[];
+  onResetChapter?: (item: TocItem) => void;
+  onToggleAutoMark?: (chapterId: string) => void;
 }> = ({
   item,
   currentPage,
@@ -55,13 +66,17 @@ const TocItemRow: React.FC<{
   depth = 0,
   completedChapterIds = [],
   onToggleChapter,
+  readPages = [],
+  disabledAutoMarkIds = [],
+  onResetChapter,
+  onToggleAutoMark,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const hasChildren = item.items && item.items.length > 0;
   const isWithinRange =
     currentPage >= item.pageNumber && currentPage <= (item.endPage || item.pageNumber);
   const isItemCompleted = !!(item.id && completedChapterIds.includes(item.id));
-  const pageProgress = getChapterPageProgress(item, currentPage);
+  const pageProgress = getChapterPageProgress(item, readPages, disabledAutoMarkIds);
   const hasMultiplePages = (item.endPage || item.pageNumber) > item.pageNumber;
 
   return (
@@ -124,12 +139,62 @@ const TocItemRow: React.FC<{
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 pl-1.5">
-          {isWithinRange && hasMultiplePages && (
-            <span className="text-[10px] font-semibold text-purple-700 bg-purple-200/70 px-1.5 py-0.2 rounded-full">
-              {pageProgress.progress}%
-            </span>
+        {/* Section Actions & Progress Indicator */}
+        <div className="flex items-center gap-1 shrink-0 pl-1.5">
+          {/* Auto-mark complete toggle */}
+          {item.id && onToggleAutoMark && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleAutoMark(item.id!);
+              }}
+              title={
+                pageProgress.isAutoMarkDisabled
+                  ? 'Auto-mark is OFF (Click to turn ON)'
+                  : 'Auto-mark is ON (Click to turn OFF)'
+              }
+              className={`p-1 rounded transition-all ${
+                pageProgress.isAutoMarkDisabled
+                  ? 'text-amber-500 hover:bg-amber-100/70'
+                  : 'text-gray-300 hover:text-purple-600 hover:bg-purple-100/50'
+              }`}
+            >
+              {pageProgress.isAutoMarkDisabled ? (
+                <ZapOff className="w-3 h-3" />
+              ) : (
+                <Zap className="w-3 h-3" />
+              )}
+            </button>
           )}
+
+          {/* Reset progress button */}
+          {onResetChapter && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onResetChapter(item);
+              }}
+              title={`Reset "${item.title}" progress`}
+              className="p-1 text-gray-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all opacity-0 group-hover:opacity-100"
+            >
+              <RotateCcw className="w-3 h-3" />
+            </button>
+          )}
+
+          {/* Page-based Progress Badge */}
+          <span
+            className={`text-[10px] font-semibold font-mono px-1.5 py-0.2 rounded-full ${
+              isItemCompleted
+                ? 'bg-emerald-100 text-emerald-800'
+                : pageProgress.pagesRead > 0
+                ? 'bg-purple-100 text-purple-800'
+                : 'bg-gray-100 text-gray-500'
+            }`}
+            title={`${pageProgress.pagesRead} of ${pageProgress.totalPages} pages read`}
+          >
+            {pageProgress.pagesRead}/{pageProgress.totalPages} ({pageProgress.progress}%)
+          </span>
+
           <button
             onClick={() => onJumpToPage(item.pageNumber)}
             className="text-[10px] text-purple-600 font-mono hover:underline"
@@ -141,12 +206,14 @@ const TocItemRow: React.FC<{
         </div>
       </div>
 
-      {/* Mini progress bar under currently active section */}
-      {isWithinRange && hasMultiplePages && (
+      {/* Mini progress bar under section */}
+      {hasMultiplePages && (
         <div className="mx-2 px-1 pb-1">
-          <div className="w-full bg-purple-200/60 h-1 rounded-full overflow-hidden">
+          <div className="w-full bg-purple-200/50 h-1 rounded-full overflow-hidden">
             <div
-              className="bg-purple-600 h-full rounded-full transition-all duration-300"
+              className={`h-full rounded-full transition-all duration-300 ${
+                isItemCompleted ? 'bg-emerald-500' : 'bg-purple-600'
+              }`}
               style={{ width: `${pageProgress.progress}%` }}
             />
           </div>
@@ -164,6 +231,10 @@ const TocItemRow: React.FC<{
               depth={depth + 1}
               completedChapterIds={completedChapterIds}
               onToggleChapter={onToggleChapter}
+              readPages={readPages}
+              disabledAutoMarkIds={disabledAutoMarkIds}
+              onResetChapter={onResetChapter}
+              onToggleAutoMark={onToggleAutoMark}
             />
           ))}
         </div>
@@ -191,6 +262,10 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
   onToggleCompleted,
   completedChapterIds = [],
   onToggleChapter,
+  readPages = [],
+  disabledAutoMarkIds = [],
+  onResetChapter,
+  onToggleAutoMark,
 }) => {
   const [activeTab, setActiveTab] = useState<'toc' | 'notes' | 'bookmarks'>('notes');
   const [searchQuery, setSearchQuery] = useState('');
@@ -201,7 +276,9 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
   const activeInfo = findActiveChapter(toc, currentPage);
   const activeTarget = activeInfo.subchapter || activeInfo.chapter;
   const isCurrentTargetCompleted = activeTarget?.id ? completedChapterIds.includes(activeTarget.id) : false;
-  const activeProgress = activeTarget ? getChapterPageProgress(activeTarget, currentPage) : null;
+  const activeProgress = activeTarget
+    ? getChapterPageProgress(activeTarget, readPages, disabledAutoMarkIds)
+    : null;
   const chapterStats = countTotalChaptersAndCompleted(toc, completedChapterIds);
 
   // Trigger celebratory confetti when completing a textbook
@@ -358,28 +435,69 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                         <BookOpen className="w-3 h-3" />
                         Currently Studying
                       </span>
-                      {activeTarget && (
-                        <button
-                          onClick={() => activeTarget.id && onToggleChapter?.(activeTarget.id)}
-                          className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg font-medium transition-all ${
-                            isCurrentTargetCompleted
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-purple-200/70 text-purple-800 hover:bg-purple-200'
-                          }`}
-                        >
-                          {isCurrentTargetCompleted ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              <span>Studied</span>
-                            </>
-                          ) : (
-                            <>
-                              <Circle className="w-3 h-3 text-purple-600" />
-                              <span>Mark Studied</span>
-                            </>
-                          )}
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {activeTarget?.id && onToggleAutoMark && (
+                          <button
+                            onClick={() => onToggleAutoMark(activeTarget.id!)}
+                            title={
+                              activeProgress?.isAutoMarkDisabled
+                                ? 'Auto-mark is OFF (Click to turn ON)'
+                                : 'Auto-mark is ON (Click to turn OFF)'
+                            }
+                            className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg font-medium transition-all ${
+                              activeProgress?.isAutoMarkDisabled
+                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                                : 'bg-purple-100 text-purple-700 hover:bg-purple-200/70'
+                            }`}
+                          >
+                            {activeProgress?.isAutoMarkDisabled ? (
+                              <>
+                                <ZapOff className="w-3 h-3 text-amber-600" />
+                                <span>Auto: OFF</span>
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-3 h-3 text-purple-600 fill-purple-600" />
+                                <span>Auto: ON</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {activeTarget && onResetChapter && (
+                          <button
+                            onClick={() => onResetChapter(activeTarget)}
+                            title="Reset reading progress for this section (clears read pages in this section)"
+                            className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg font-medium text-gray-500 hover:text-rose-600 hover:bg-rose-50 transition-all border border-purple-200/60"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Reset</span>
+                          </button>
+                        )}
+
+                        {activeTarget && (
+                          <button
+                            onClick={() => activeTarget.id && onToggleChapter?.(activeTarget.id)}
+                            className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg font-medium transition-all ${
+                              isCurrentTargetCompleted
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-purple-200/70 text-purple-800 hover:bg-purple-200'
+                            }`}
+                          >
+                            {isCurrentTargetCompleted ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>Studied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Circle className="w-3 h-3 text-purple-600" />
+                                <span>Mark Studied</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div>
@@ -397,13 +515,15 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                       <div className="space-y-1 pt-0.5">
                         <div className="flex items-center justify-between text-[10px] text-gray-600">
                           <span>
-                            Page {activeProgress.pagesRead} of {activeProgress.totalPages} in section
+                            {activeProgress.pagesRead} of {activeProgress.totalPages} pages completed in this section
                           </span>
                           <span className="font-semibold text-purple-700">{activeProgress.progress}%</span>
                         </div>
                         <div className="w-full bg-purple-200/60 h-1.5 rounded-full overflow-hidden">
                           <div
-                            className="bg-purple-600 h-full rounded-full transition-all duration-300"
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              isCurrentTargetCompleted ? 'bg-emerald-500' : 'bg-purple-600'
+                            }`}
                             style={{ width: `${activeProgress.progress}%` }}
                           />
                         </div>
@@ -426,6 +546,10 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                       depth={0}
                       completedChapterIds={completedChapterIds}
                       onToggleChapter={onToggleChapter}
+                      readPages={readPages}
+                      disabledAutoMarkIds={disabledAutoMarkIds}
+                      onResetChapter={onResetChapter}
+                      onToggleAutoMark={onToggleAutoMark}
                     />
                   ))}
                 </div>
@@ -615,7 +739,7 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                 </div>
                 <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
                   {toc.map((chap, cIdx) => {
-                    const chapProgress = getChapterPageProgress(chap, currentPage);
+                    const chapProgress = getChapterPageProgress(chap, readPages, disabledAutoMarkIds);
                     const isChapDone = !!(chap.id && completedChapterIds.includes(chap.id));
                     return (
                       <div
@@ -644,22 +768,63 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
                               {chap.title}
                             </span>
                           </button>
-                          <button
-                            onClick={() => onJumpToPage(chap.pageNumber)}
-                            className="text-[10px] text-purple-600 font-mono shrink-0 hover:underline"
-                          >
-                            p.{chap.pageNumber}
-                          </button>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {/* Auto-mark toggle */}
+                            {chap.id && onToggleAutoMark && (
+                              <button
+                                onClick={() => onToggleAutoMark(chap.id!)}
+                                title={
+                                  chapProgress.isAutoMarkDisabled
+                                    ? 'Auto-mark is OFF (Click to turn ON)'
+                                    : 'Auto-mark is ON (Click to turn OFF)'
+                                }
+                                className={`p-0.5 rounded transition-all ${
+                                  chapProgress.isAutoMarkDisabled
+                                    ? 'text-amber-500'
+                                    : 'text-gray-300 hover:text-purple-600'
+                                }`}
+                              >
+                                {chapProgress.isAutoMarkDisabled ? (
+                                  <ZapOff className="w-3 h-3" />
+                                ) : (
+                                  <Zap className="w-3 h-3" />
+                                )}
+                              </button>
+                            )}
+
+                            {/* Reset button */}
+                            {onResetChapter && (
+                              <button
+                                onClick={() => onResetChapter(chap)}
+                                title={`Reset "${chap.title}" progress`}
+                                className="p-0.5 text-gray-300 hover:text-rose-600 rounded transition-all"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => onJumpToPage(chap.pageNumber)}
+                              className="text-[10px] text-purple-600 font-mono shrink-0 hover:underline"
+                              title={`Go to page ${chap.pageNumber}`}
+                            >
+                              p.{chap.pageNumber}
+                            </button>
+                          </div>
                         </div>
+
                         <div className="mt-1.5 flex items-center gap-2">
                           <div className="flex-1 bg-purple-200/50 h-1 rounded-full overflow-hidden">
                             <div
-                              className="bg-purple-600 h-full rounded-full"
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                isChapDone ? 'bg-emerald-500' : 'bg-purple-600'
+                              }`}
                               style={{ width: `${chapProgress.progress}%` }}
                             />
                           </div>
-                          <span className="text-[10px] text-gray-400 font-mono shrink-0">
-                            {chapProgress.progress}%
+                          <span className="text-[10px] text-gray-500 font-mono shrink-0">
+                            {chapProgress.pagesRead}/{chapProgress.totalPages} ({chapProgress.progress}%)
                           </span>
                         </div>
                       </div>
