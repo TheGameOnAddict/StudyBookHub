@@ -108,7 +108,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
         );
       }
 
-      setLoadingStep('Consulting Gemini 1.5 Flash to craft questions...');
+      setLoadingStep('Consulting Gemini AI to craft questions...');
       const generated = await generateChapterQuiz(keyToUse, chapter.title, extractedText, 3);
 
       setQuestions(generated);
