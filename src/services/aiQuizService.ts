@@ -4,17 +4,20 @@ const GEMINI_API_KEY_STORAGE = 'studybook_gemini_api_key';
 const GEMINI_MODEL_STORAGE = 'studybook_gemini_model';
 
 /**
- * Priority list of candidate Gemini models to try when generating content
+ * Priority list of candidate Gemini models to try when generating content.
+ * Modern Gemini 3.x Flash models take precedence.
  */
 const CANDIDATE_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.7-flash',
+  'gemini-3.8-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-1.5-flash-latest',
   'gemini-1.5-flash',
-  'gemini-2.5-flash',
-  'gemini-1.5-flash-002',
-  'gemini-1.5-flash-001',
-  'gemini-1.5-flash-8b',
-  'gemini-2.0-flash-lite',
   'gemini-1.5-pro',
 ];
 
@@ -62,6 +65,40 @@ export function hasGeminiApiKey(): boolean {
 }
 
 /**
+ * Automatically parses any recommended/suggested model from Google's error message.
+ * e.g.: "Please update your code to use models/gemini-3.6-flash for the latest features..."
+ */
+export function extractSuggestedModel(errorText: string): string | null {
+  if (!errorText) return null;
+  const match = errorText.match(/(?:use|switch to|update to)\s+(?:models\/)?(gemini-[\w.-]+)/i);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+  return null;
+}
+
+/**
+ * Computes sorting priority for a model name
+ */
+function getModelPriority(name: string): number {
+  const clean = name.replace(/^models\//, '').toLowerCase();
+
+  // Candidate index priority
+  const idx = CANDIDATE_MODELS.indexOf(clean);
+  if (idx !== -1) {
+    return 1000 - idx;
+  }
+
+  // Version number weighting for newer unlisted versions
+  const versionMatch = clean.match(/gemini-(\d+(?:\.\d+)?)/);
+  const version = versionMatch ? parseFloat(versionMatch[1]) : 0;
+  if (clean.includes('flash')) {
+    return 500 + version * 10;
+  }
+  return version * 10;
+}
+
+/**
  * Dynamically queries Google's ListModels API for the user's API key
  * and selects the best available model supporting generateContent.
  */
@@ -93,45 +130,12 @@ export async function discoverBestGeminiModel(
       );
 
       if (contentModels.length > 0) {
-        // 1. Priority match from candidate list
-        for (const candidate of CANDIDATE_MODELS) {
-          const match = contentModels.find(
-            (m) =>
-              m.name === `models/${candidate}` ||
-              m.name === candidate ||
-              m.name.endsWith(`/${candidate}`)
-          );
-          if (match) {
-            const chosen = match.name.replace(/^models\//, '');
-            setGeminiModel(chosen);
-            return chosen;
-          }
-        }
+        // Sort content models by priority (highest version flash models first)
+        contentModels.sort((a, b) => getModelPriority(b.name) - getModelPriority(a.name));
 
-        // 2. Any model with 'flash' in its name
-        const flashMatch = contentModels.find((m) =>
-          m.name.toLowerCase().includes('flash')
-        );
-        if (flashMatch) {
-          const chosen = flashMatch.name.replace(/^models\//, '');
-          setGeminiModel(chosen);
-          return chosen;
-        }
-
-        // 3. Any model with 'gemini' in its name
-        const anyGemini = contentModels.find((m) =>
-          m.name.toLowerCase().includes('gemini')
-        );
-        if (anyGemini) {
-          const chosen = anyGemini.name.replace(/^models\//, '');
-          setGeminiModel(chosen);
-          return chosen;
-        }
-
-        // 4. First available content model
-        const firstSupported = contentModels[0].name.replace(/^models\//, '');
-        setGeminiModel(firstSupported);
-        return firstSupported;
+        const chosen = contentModels[0].name.replace(/^models\//, '');
+        setGeminiModel(chosen);
+        return chosen;
       }
     }
   } catch (e) {
@@ -139,7 +143,7 @@ export async function discoverBestGeminiModel(
   }
 
   // Default fallback if list is unavailable
-  return CANDIDATE_MODELS[0]; // gemini-2.0-flash
+  return CANDIDATE_MODELS[0]; // gemini-3.6-flash
 }
 
 /**
@@ -149,7 +153,8 @@ async function testModelPing(
   apiKey: string,
   modelName: string
 ): Promise<{ ok: boolean; status: number; errorMsg?: string }> {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const cleanModel = modelName.replace(/^models\//, '');
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   try {
     const response = await fetch(endpoint, {
@@ -183,7 +188,7 @@ async function testModelPing(
 }
 
 /**
- * Validate Gemini API Key with dynamic model discovery and fallback verification
+ * Validate Gemini API Key with dynamic model discovery and automatic suggestion parsing
  */
 export async function validateGeminiApiKey(
   apiKey: string
@@ -204,24 +209,45 @@ export async function validateGeminiApiKey(
       return { valid: true, model: primaryModel };
     }
 
-    // 3. If invalid key error (400/403 with API_KEY_INVALID), return immediately
+    // 3. Check if error is strictly an invalid API key error
     const errorMsg = testResult.errorMsg || '';
     if (
       testResult.status === 400 &&
-      (errorMsg.toLowerCase().includes('api key') ||
-        errorMsg.toLowerCase().includes('invalid'))
+      (errorMsg.toLowerCase().includes('api key not valid') ||
+        errorMsg.toLowerCase().includes('api_key_invalid') ||
+        errorMsg.toLowerCase().includes('pass a valid api key'))
     ) {
       return { valid: false, error: errorMsg };
     }
 
-    // 4. If primary model was not found or unsupported, iterate through candidate models
+    // 4. Check if Google explicitly recommended a newer model in the error message!
+    const suggestedModel = extractSuggestedModel(errorMsg);
+    if (suggestedModel) {
+      const suggestedTest = await testModelPing(cleanKey, suggestedModel);
+      if (suggestedTest.ok) {
+        setGeminiModel(suggestedModel);
+        return { valid: true, model: suggestedModel };
+      }
+    }
+
+    // 5. If primary model failed, iterate through candidate models
     for (const candidate of CANDIDATE_MODELS) {
-      if (candidate === primaryModel) continue;
+      if (candidate === primaryModel || candidate === suggestedModel) continue;
 
       const candidateTest = await testModelPing(cleanKey, candidate);
       if (candidateTest.ok) {
         setGeminiModel(candidate);
         return { valid: true, model: candidate };
+      }
+
+      // Check if candidate error also recommended a model
+      const subSuggested = extractSuggestedModel(candidateTest.errorMsg || '');
+      if (subSuggested && subSuggested !== candidate) {
+        const subTest = await testModelPing(cleanKey, subSuggested);
+        if (subTest.ok) {
+          setGeminiModel(subSuggested);
+          return { valid: true, model: subSuggested };
+        }
       }
     }
 
@@ -248,7 +274,8 @@ async function callGeminiGenerateQuiz(
   prompt: string,
   numQuestions: number
 ): Promise<string> {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const cleanModel = modelName.replace(/^models\//, '');
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const requestBody = {
     contents: [
@@ -359,16 +386,22 @@ Guidelines:
     rawContent = await callGeminiGenerateQuiz(cleanKey, activeModel, prompt, numQuestions);
   } catch (err: any) {
     const errMsg = String(err?.message || '');
-    // If model is not found or not supported, try discovery and fallback models
-    if (
-      errMsg.includes('not found') ||
-      errMsg.includes('not supported') ||
-      errMsg.includes('404')
-    ) {
-      console.warn(`Model ${activeModel} failed with: ${errMsg}. Attempting fallback discovery...`);
-      const freshModel = await discoverBestGeminiModel(cleanKey, true);
 
-      if (freshModel && freshModel !== activeModel) {
+    // 1. First check if Google's error specifically suggests a working model
+    const suggested = extractSuggestedModel(errMsg);
+    if (suggested && suggested !== activeModel) {
+      try {
+        rawContent = await callGeminiGenerateQuiz(cleanKey, suggested, prompt, numQuestions);
+        setGeminiModel(suggested);
+      } catch {
+        // Continue to discovery / fallback
+      }
+    }
+
+    // 2. Discover fresh working model
+    if (!rawContent) {
+      const freshModel = await discoverBestGeminiModel(cleanKey, true);
+      if (freshModel && freshModel !== activeModel && freshModel !== suggested) {
         try {
           rawContent = await callGeminiGenerateQuiz(cleanKey, freshModel, prompt, numQuestions);
           setGeminiModel(freshModel);
@@ -376,17 +409,18 @@ Guidelines:
           // Continue to candidate loop below
         }
       }
+    }
 
-      if (!rawContent) {
-        for (const candidate of CANDIDATE_MODELS) {
-          if (candidate === activeModel || candidate === freshModel) continue;
-          try {
-            rawContent = await callGeminiGenerateQuiz(cleanKey, candidate, prompt, numQuestions);
-            setGeminiModel(candidate);
-            break;
-          } catch {
-            // continue trying
-          }
+    // 3. Cycle through candidates
+    if (!rawContent) {
+      for (const candidate of CANDIDATE_MODELS) {
+        if (candidate === activeModel || candidate === suggested) continue;
+        try {
+          rawContent = await callGeminiGenerateQuiz(cleanKey, candidate, prompt, numQuestions);
+          setGeminiModel(candidate);
+          break;
+        } catch {
+          // continue trying
         }
       }
     }
