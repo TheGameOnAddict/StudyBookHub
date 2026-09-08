@@ -44,6 +44,15 @@ export async function saveBook(book: Book): Promise<void> {
   await db.books.put(book);
 }
 
+export async function addStudyTime(bookId: string, additionalSeconds: number): Promise<number> {
+  const book = await db.books.get(bookId);
+  if (!book) return 0;
+  const currentTotal = book.studyTimeSeconds || 0;
+  const updatedTotal = currentTotal + Math.max(0, Math.round(additionalSeconds));
+  await db.books.update(bookId, { studyTimeSeconds: updatedTotal });
+  return updatedTotal;
+}
+
 export async function updateBookProgress(
   bookId: string,
   currentPage: number,

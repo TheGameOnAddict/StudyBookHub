@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BookOpen,
   Highlighter,
@@ -14,6 +14,7 @@ import {
   FileDown,
   ExternalLink,
   ChevronDown,
+  Clock,
 } from 'lucide-react';
 import type { BookmarkItem, HighlightItem, NoteItem, TocItem } from '../../types';
 import {
@@ -46,6 +47,7 @@ interface ReaderSidebarProps {
   disabledAutoMarkIds?: string[];
   onResetChapter?: (item: TocItem) => void;
   onToggleAutoMark?: (chapterId: string) => void;
+  studyTimeSeconds?: number;
 }
 
 const TocItemRow: React.FC<{
@@ -71,25 +73,199 @@ const TocItemRow: React.FC<{
   onResetChapter,
   onToggleAutoMark,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
   const hasChildren = item.items && item.items.length > 0;
   const isWithinRange =
     currentPage >= item.pageNumber && currentPage <= (item.endPage || item.pageNumber);
+  const [isExpanded, setIsExpanded] = useState<boolean>(isWithinRange);
+
+  useEffect(() => {
+    if (isWithinRange) {
+      setIsExpanded(true);
+    }
+  }, [isWithinRange]);
+
   const isItemCompleted = !!(item.id && completedChapterIds.includes(item.id));
   const pageProgress = getChapterPageProgress(item, readPages, disabledAutoMarkIds);
   const hasMultiplePages = (item.endPage || item.pageNumber) > item.pageNumber;
 
+  // --- Depth 0: Top-Level Chapter Card ---
+  if (depth === 0) {
+    return (
+      <div
+        className={`mb-2.5 rounded-2xl border transition-all overflow-hidden ${
+          isWithinRange
+            ? 'border-purple-300 bg-purple-50/40 shadow-xs ring-1 ring-purple-300/60'
+            : isItemCompleted
+            ? 'border-emerald-200 bg-emerald-50/20'
+            : 'border-purple-200/80 bg-white hover:border-purple-300 shadow-2xs'
+        }`}
+      >
+        {/* Chapter Header Bar */}
+        <div className="w-full text-left px-3 py-2 flex items-center justify-between group transition-all">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {hasChildren ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(!isExpanded);
+                }}
+                className="p-1 text-purple-600 hover:text-purple-900 hover:bg-purple-100 rounded-lg transition-transform shrink-0"
+                title={isExpanded ? 'Collapse chapter' : 'Expand chapter'}
+              >
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform duration-200 ${
+                    isExpanded ? 'rotate-0' : '-rotate-90'
+                  }`}
+                />
+              </button>
+            ) : (
+              <div className="w-4 h-4 shrink-0" />
+            )}
+
+            {/* Chapter study completion checkbox */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (item.id && onToggleChapter) {
+                  onToggleChapter(item.id);
+                }
+              }}
+              title={isItemCompleted ? 'Mark as unstudied' : 'Mark as studied'}
+              className="p-0.5 text-gray-400 hover:scale-110 active:scale-95 transition-transform shrink-0"
+            >
+              {isItemCompleted ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100" />
+              ) : (
+                <Circle className="w-4 h-4 text-purple-300 hover:text-purple-600" />
+              )}
+            </button>
+
+            {/* Chapter Title */}
+            <button
+              onClick={() => onJumpToPage(item.pageNumber)}
+              className={`truncate text-left flex-1 hover:text-purple-800 font-bold text-xs sm:text-[13px] ${
+                isItemCompleted ? 'line-through text-gray-400' : 'text-gray-900'
+              }`}
+              title={item.title}
+            >
+              {item.title}
+            </button>
+          </div>
+
+          {/* Action controls & page range */}
+          <div className="flex items-center gap-1 shrink-0 pl-1.5">
+            {item.id && onToggleAutoMark && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleAutoMark(item.id!);
+                }}
+                title={
+                  pageProgress.isAutoMarkDisabled
+                    ? 'Auto-mark is OFF for this chapter (Click to turn ON)'
+                    : 'Auto-mark is ON for this chapter (Click to turn OFF)'
+                }
+                className={`p-1 rounded transition-all ${
+                  pageProgress.isAutoMarkDisabled
+                    ? 'text-amber-500 hover:bg-amber-100/70'
+                    : 'text-gray-300 hover:text-purple-600 hover:bg-purple-100/50'
+                }`}
+              >
+                {pageProgress.isAutoMarkDisabled ? (
+                  <ZapOff className="w-3.5 h-3.5" />
+                ) : (
+                  <Zap className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
+            {onResetChapter && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResetChapter(item);
+                }}
+                title={`Reset "${item.title}" progress`}
+                className="p-1 text-gray-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all opacity-0 group-hover:opacity-100"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            <span
+              className={`text-[10px] font-semibold font-mono px-1.5 py-0.5 rounded-full ${
+                isItemCompleted
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : pageProgress.pagesRead > 0
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'bg-gray-100 text-gray-500'
+              }`}
+              title={`${pageProgress.pagesRead} of ${pageProgress.totalPages} pages read`}
+            >
+              {pageProgress.pagesRead}/{pageProgress.totalPages} ({pageProgress.progress}%)
+            </span>
+
+            <button
+              onClick={() => onJumpToPage(item.pageNumber)}
+              className="text-[10px] text-purple-600 font-mono hover:underline pl-0.5"
+              title={`Go to page ${item.pageNumber}`}
+            >
+              p.{item.pageNumber}
+              {hasMultiplePages ? `-${item.endPage}` : ''}
+            </button>
+          </div>
+        </div>
+
+        {/* Mini progress bar under chapter header */}
+        {hasMultiplePages && (
+          <div className="mx-3 pb-2">
+            <div className="w-full bg-purple-200/50 h-1.5 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  isItemCompleted ? 'bg-emerald-500' : 'bg-purple-600'
+                }`}
+                style={{ width: `${pageProgress.progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Subchapters Container with clear visual separation */}
+        {hasChildren && isExpanded && (
+          <div className="border-t border-purple-100 bg-purple-50/20 px-3 py-2 space-y-1">
+            {item.items!.map((child, cIdx) => (
+              <TocItemRow
+                key={`${child.title}_${cIdx}`}
+                item={child}
+                currentPage={currentPage}
+                onJumpToPage={onJumpToPage}
+                depth={depth + 1}
+                completedChapterIds={completedChapterIds}
+                onToggleChapter={onToggleChapter}
+                readPages={readPages}
+                disabledAutoMarkIds={disabledAutoMarkIds}
+                onResetChapter={onResetChapter}
+                onToggleAutoMark={onToggleAutoMark}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- Depth > 0: Nested Subchapters ---
   return (
     <div className="space-y-0.5">
       <div
         className={`w-full text-left px-2 py-1.5 rounded-xl text-xs flex items-center justify-between group transition-all ${
           isWithinRange
-            ? 'bg-purple-100/90 text-purple-950 font-medium shadow-xs border border-purple-200/80'
+            ? 'bg-purple-100/90 text-purple-950 font-semibold shadow-xs border border-purple-200'
             : isItemCompleted
-            ? 'bg-emerald-50/40 text-gray-700 hover:bg-purple-50/50'
-            : 'hover:bg-purple-50 text-gray-700'
+            ? 'bg-emerald-50/50 text-gray-700 hover:bg-purple-50/50'
+            : 'hover:bg-purple-100/50 text-gray-700'
         }`}
-        style={{ paddingLeft: `${Math.min(depth * 14 + 6, 44)}px` }}
+        style={{ paddingLeft: `${Math.min((depth - 1) * 12 + 4, 32)}px` }}
       >
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {hasChildren ? (
@@ -98,19 +274,19 @@ const TocItemRow: React.FC<{
                 e.stopPropagation();
                 setIsExpanded(!isExpanded);
               }}
-              className="p-0.5 text-gray-400 hover:text-purple-700 rounded transition-transform"
+              className="p-0.5 text-gray-400 hover:text-purple-700 rounded transition-transform shrink-0"
             >
               <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                className={`w-3 h-3 transition-transform duration-200 ${
                   isExpanded ? 'rotate-0' : '-rotate-90'
                 }`}
               />
             </button>
           ) : (
-            <div className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-purple-400 font-mono text-[10px] select-none pl-0.5 shrink-0">↳</span>
           )}
 
-          {/* Chapter study completion checkbox */}
+          {/* Subchapter study checkbox */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -130,18 +306,17 @@ const TocItemRow: React.FC<{
 
           <button
             onClick={() => onJumpToPage(item.pageNumber)}
-            className={`truncate text-left flex-1 hover:text-purple-800 ${
+            className={`truncate text-left flex-1 hover:text-purple-800 text-xs ${
               isItemCompleted ? 'line-through text-gray-400' : ''
-            } ${isWithinRange ? 'font-bold text-purple-950' : ''}`}
+            } ${isWithinRange ? 'font-bold text-purple-950' : 'text-gray-700'}`}
             title={item.title}
           >
             {item.title}
           </button>
         </div>
 
-        {/* Section Actions & Progress Indicator */}
-        <div className="flex items-center gap-1 shrink-0 pl-1.5">
-          {/* Auto-mark complete toggle */}
+        {/* Section actions & progress */}
+        <div className="flex items-center gap-1 shrink-0 pl-1">
           {item.id && onToggleAutoMark && (
             <button
               onClick={(e) => {
@@ -153,10 +328,10 @@ const TocItemRow: React.FC<{
                   ? 'Auto-mark is OFF (Click to turn ON)'
                   : 'Auto-mark is ON (Click to turn OFF)'
               }
-              className={`p-1 rounded transition-all ${
+              className={`p-0.5 rounded transition-all ${
                 pageProgress.isAutoMarkDisabled
-                  ? 'text-amber-500 hover:bg-amber-100/70'
-                  : 'text-gray-300 hover:text-purple-600 hover:bg-purple-100/50'
+                  ? 'text-amber-500'
+                  : 'text-gray-300 hover:text-purple-600'
               }`}
             >
               {pageProgress.isAutoMarkDisabled ? (
@@ -167,7 +342,6 @@ const TocItemRow: React.FC<{
             </button>
           )}
 
-          {/* Reset progress button */}
           {onResetChapter && (
             <button
               onClick={(e) => {
@@ -175,15 +349,14 @@ const TocItemRow: React.FC<{
                 onResetChapter(item);
               }}
               title={`Reset "${item.title}" progress`}
-              className="p-1 text-gray-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all opacity-0 group-hover:opacity-100"
+              className="p-0.5 text-gray-300 hover:text-rose-600 rounded transition-all opacity-0 group-hover:opacity-100"
             >
               <RotateCcw className="w-3 h-3" />
             </button>
           )}
 
-          {/* Page-based Progress Badge */}
           <span
-            className={`text-[10px] font-semibold font-mono px-1.5 py-0.2 rounded-full ${
+            className={`text-[9px] font-semibold font-mono px-1.5 py-0.2 rounded-full ${
               isItemCompleted
                 ? 'bg-emerald-100 text-emerald-800'
                 : pageProgress.pagesRead > 0
@@ -192,7 +365,7 @@ const TocItemRow: React.FC<{
             }`}
             title={`${pageProgress.pagesRead} of ${pageProgress.totalPages} pages read`}
           >
-            {pageProgress.pagesRead}/{pageProgress.totalPages} ({pageProgress.progress}%)
+            {pageProgress.pagesRead}/{pageProgress.totalPages}
           </span>
 
           <button
@@ -201,27 +374,12 @@ const TocItemRow: React.FC<{
             title={`Go to page ${item.pageNumber}`}
           >
             p.{item.pageNumber}
-            {hasMultiplePages ? `-${item.endPage}` : ''}
           </button>
         </div>
       </div>
 
-      {/* Mini progress bar under section */}
-      {hasMultiplePages && (
-        <div className="mx-2 px-1 pb-1">
-          <div className="w-full bg-purple-200/50 h-1 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-300 ${
-                isItemCompleted ? 'bg-emerald-500' : 'bg-purple-600'
-              }`}
-              style={{ width: `${pageProgress.progress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
       {hasChildren && isExpanded && (
-        <div className="space-y-0.5">
+        <div className="pl-3 space-y-0.5">
           {item.items!.map((child, cIdx) => (
             <TocItemRow
               key={`${child.title}_${cIdx}`}
@@ -266,11 +424,13 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
   disabledAutoMarkIds = [],
   onResetChapter,
   onToggleAutoMark,
+  studyTimeSeconds,
 }) => {
   const [activeTab, setActiveTab] = useState<'toc' | 'notes' | 'bookmarks'>('notes');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const progressPercent = totalPages > 0 ? Math.round((currentPage / totalPages) * 100) : 0;
+  const readPagesCount = readPages.length;
+  const readProgressPercent = totalPages > 0 ? Math.min(100, Math.round((readPagesCount / totalPages) * 100)) : 0;
 
   // Chapter and Subchapter progress statistics
   const activeInfo = findActiveChapter(toc, currentPage);
@@ -347,9 +507,15 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
           <h2 className="font-bold text-gray-900 text-sm truncate max-w-[220px]">
             {bookTitle}
           </h2>
-          <p className="text-xs text-purple-600 font-medium">
-            Page {currentPage} of {totalPages} ({progressPercent}%)
-          </p>
+          <div className="flex items-center gap-1.5 text-xs pt-0.5">
+            <span className="text-purple-700 font-medium">
+              Page {currentPage} of {totalPages}
+            </span>
+            <span className="text-purple-300">•</span>
+            <span className="text-emerald-700 font-semibold font-mono">
+              {readPagesCount} read ({readProgressPercent}%)
+            </span>
+          </div>
         </div>
         <button
           onClick={onClose}
@@ -697,28 +863,54 @@ export const ReaderSidebar: React.FC<ReaderSidebarProps> = ({
         {activeTab === 'bookmarks' && (
           <div className="space-y-4">
             {/* Progress Card */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-200/80 space-y-3">
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50 via-white to-purple-100/40 border border-purple-200/80 space-y-3.5 shadow-2xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-purple-900">Study Progress</span>
-                <span className="text-sm font-extrabold text-purple-700">{progressPercent}%</span>
+                <div>
+                  <span className="text-[10px] font-bold tracking-wider uppercase text-purple-700 block">Total Reading Completion</span>
+                  <span className="text-xs text-gray-500 font-medium">Pages read out of book</span>
+                </div>
+                <span className="text-lg font-extrabold text-purple-700">{readProgressPercent}%</span>
               </div>
               <div className="w-full bg-purple-200/70 h-2.5 rounded-full overflow-hidden">
                 <div
                   className="bg-gradient-to-r from-purple-500 to-purple-600 h-full rounded-full transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
+                  style={{ width: `${readProgressPercent}%` }}
                 />
               </div>
-              <p className="text-[11px] text-gray-600">
-                You are currently on page <strong className="text-purple-800">{currentPage}</strong> of {totalPages}.
-              </p>
+
+              {/* Two-Column Breakdown: Current Position vs Actual Pages Read */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="bg-purple-50/70 border border-purple-100 p-2.5 rounded-xl">
+                  <span className="text-purple-600 block text-[9px] uppercase font-bold tracking-wide">Current View</span>
+                  <span className="font-bold text-gray-900 text-xs">Page {currentPage}</span>
+                  <span className="text-[10px] text-gray-500 block">of {totalPages} pages</span>
+                </div>
+                <div className="bg-emerald-50/70 border border-emerald-100 p-2.5 rounded-xl">
+                  <span className="text-emerald-700 block text-[9px] uppercase font-bold tracking-wide">Pages Read</span>
+                  <span className="font-bold text-gray-900 text-xs">{readPagesCount} pages</span>
+                  <span className="text-[10px] text-emerald-600 block font-semibold">{readProgressPercent}% completed</span>
+                </div>
+              </div>
+
+              {/* Study Time Badge */}
+              {studyTimeSeconds !== undefined && studyTimeSeconds > 0 && (
+                <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-purple-100/50 border border-purple-200/60 text-xs">
+                  <span className="text-purple-800 font-medium flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-purple-600" /> Total Study Time
+                  </span>
+                  <span className="font-mono font-bold text-purple-900">
+                    {Math.floor(studyTimeSeconds / 60)}m {studyTimeSeconds % 60}s
+                  </span>
+                </div>
+              )}
 
               {/* Mark as Completed Toggle */}
               <button
                 onClick={handleCompleteToggle}
-                className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
+                className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
                   isCompleted
                     ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
-                    : 'bg-white text-purple-700 border border-purple-200 hover:bg-purple-100'
+                    : 'bg-white text-purple-700 border border-purple-200 hover:bg-purple-50 shadow-2xs'
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />

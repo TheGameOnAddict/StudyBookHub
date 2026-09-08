@@ -77,6 +77,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [completedChapters, setCompletedChapters] = useState<string[]>([]);
   const [readPages, setReadPages] = useState<number[]>([]);
   const [disabledAutoMarkChapters, setDisabledAutoMarkChapters] = useState<string[]>([]);
+  const [studyTimeSeconds, setStudyTimeSeconds] = useState<number>(0);
 
   // Drawing state
   const [isDrawingActive, setIsDrawingActive] = useState<boolean>(false);
@@ -170,6 +171,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         if (b.completedChapters) setCompletedChapters(b.completedChapters);
         if (b.readPages) setReadPages(b.readPages);
         if (b.disabledAutoMarkChapters) setDisabledAutoMarkChapters(b.disabledAutoMarkChapters);
+        if (b.studyTimeSeconds !== undefined) setStudyTimeSeconds(b.studyTimeSeconds);
         if (b.isCompleted !== undefined) setIsCompleted(b.isCompleted);
       }
     });
@@ -535,6 +537,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     <div className="relative flex flex-col h-screen overflow-hidden bg-[#F5F3FB]">
       {/* Top Navbar */}
       <ReaderNavbar
+        bookId={bookId}
         title={bookTitle}
         currentPage={currentPage}
         totalPages={totalPages}
@@ -550,6 +553,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         onToggleBookmark={handleBookmarkToggle}
         onOpenAddNote={() => setIsAddNoteModalOpen(true)}
         notesCount={highlights.length + notes.length}
+        initialStudyTimeSeconds={studyTimeSeconds}
+        onStudyTimeUpdate={setStudyTimeSeconds}
       />
 
       {/* Main Document Reading Area */}
@@ -721,6 +726,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         disabledAutoMarkIds={disabledAutoMarkChapters}
         onResetChapter={handleResetChapter}
         onToggleAutoMark={handleToggleAutoMark}
+        studyTimeSeconds={studyTimeSeconds}
       />
 
       {/* Add Margin Note Modal */}

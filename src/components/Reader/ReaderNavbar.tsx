@@ -10,8 +10,10 @@ import {
   PanelRight,
   FileEdit,
 } from 'lucide-react';
+import { StudyTimer } from './StudyTimer';
 
 interface ReaderNavbarProps {
+  bookId: string;
   title: string;
   currentPage: number;
   totalPages: number;
@@ -27,9 +29,12 @@ interface ReaderNavbarProps {
   onToggleBookmark: () => void;
   onOpenAddNote: () => void;
   notesCount: number;
+  initialStudyTimeSeconds?: number;
+  onStudyTimeUpdate?: (totalSeconds: number) => void;
 }
 
 export const ReaderNavbar: React.FC<ReaderNavbarProps> = ({
+  bookId,
   title,
   currentPage,
   totalPages,
@@ -45,6 +50,8 @@ export const ReaderNavbar: React.FC<ReaderNavbarProps> = ({
   onToggleBookmark,
   onOpenAddNote,
   notesCount,
+  initialStudyTimeSeconds,
+  onStudyTimeUpdate,
 }) => {
   const [pageInput, setPageInput] = useState(currentPage.toString());
 
@@ -110,8 +117,15 @@ export const ReaderNavbar: React.FC<ReaderNavbarProps> = ({
         </button>
       </div>
 
-      {/* Right: Zoom & Sidebar Toggles */}
+      {/* Right: Study Timer, Zoom & Sidebar Toggles */}
       <div className="flex items-center gap-1 sm:gap-2">
+        {/* Study Focus Timer */}
+        <StudyTimer
+          bookId={bookId}
+          initialStudyTimeSeconds={initialStudyTimeSeconds}
+          onStudyTimeUpdate={onStudyTimeUpdate}
+        />
+
         {/* Zoom Controls (hidden on very small phones, visible on tablets/desktops) */}
         <div className="hidden md:flex items-center gap-1 bg-purple-50/50 p-1 rounded-xl border border-purple-100 text-xs">
           <button

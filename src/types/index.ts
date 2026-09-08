@@ -12,6 +12,7 @@ export interface Book {
   completedChapters?: string[]; // IDs of studied chapters/subchapters
   readPages?: number[]; // Distinct page numbers completed/visited
   disabledAutoMarkChapters?: string[]; // Chapter/subchapter IDs with auto-mark disabled
+  studyTimeSeconds?: number; // Total study time spent in seconds
   coverDataUrl?: string;
   pdfBlob?: Blob; // Stored locally in IndexedDB for instant offline opening
 }
